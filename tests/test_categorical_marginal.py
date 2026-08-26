@@ -46,3 +46,27 @@ def test_stable_tiebreak_uses_first_occurrence():
     values = pd.Series(["z", "a", "z", "a"])
     marginal = CategoricalMarginal.fit(values)
     assert marginal.categories == ["z", "a"]
+
+
+def test_low_cardinality_integer_column_samples_back_as_int():
+    values = pd.Series([0, 1, 0, 0, 1] * 20)
+    marginal = CategoricalMarginal.fit(values)
+    assert marginal.value_dtype == "int"
+    sampled = marginal.sample(np.linspace(0, 1, 50))
+    assert sampled.dtype.kind in "iu"
+
+
+def test_low_cardinality_float_column_samples_back_as_float():
+    values = pd.Series([1.5, 2.5, 1.5, 2.5] * 20)
+    marginal = CategoricalMarginal.fit(values)
+    assert marginal.value_dtype == "float"
+    sampled = marginal.sample(np.linspace(0, 1, 50))
+    assert sampled.dtype.kind == "f"
+
+
+def test_string_column_still_samples_as_object():
+    values = pd.Series(["a", "b", "c"] * 20)
+    marginal = CategoricalMarginal.fit(values)
+    assert marginal.value_dtype == "str"
+    sampled = marginal.sample(np.linspace(0, 1, 10))
+    assert sampled.dtype == object

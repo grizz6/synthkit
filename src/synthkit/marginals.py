@@ -85,11 +85,24 @@ class CategoricalMarginal:
     categories: list[str]
     probabilities: list[float]
     other_mass: float
+    value_dtype: str = "str"
 
     @classmethod
     def fit(
         cls, values: pd.Series, max_categories: int = DEFAULT_MAX_CATEGORIES
     ) -> "CategoricalMarginal":
+        # A low-cardinality integer or whole-valued float column is classified as categorical
+        # (see types.py) but should still emit ints/floats, not the string representation used
+        # internally for ordering and counting.
+        if pd.api.types.is_bool_dtype(values):
+            value_dtype = "bool"
+        elif pd.api.types.is_integer_dtype(values):
+            value_dtype = "int"
+        elif pd.api.types.is_float_dtype(values):
+            value_dtype = "float"
+        else:
+            value_dtype = "str"
+
         clean = values.dropna().astype(str)
         if clean.empty:
             raise ValueError("cannot fit a categorical marginal on an all-null column")
@@ -116,7 +129,9 @@ class CategoricalMarginal:
             kept = [*kept, OTHER_CATEGORY]
             probabilities = [*probabilities, other_mass]
 
-        return cls(categories=kept, probabilities=probabilities, other_mass=other_mass)
+        return cls(
+            categories=kept, probabilities=probabilities, other_mass=other_mass, value_dtype=value_dtype
+        )
 
     def sample(self, u: np.ndarray) -> np.ndarray:
         cumulative = np.cumsum(self.probabilities)
@@ -124,7 +139,15 @@ class CategoricalMarginal:
         cumulative[-1] = 1.0
         indices = np.searchsorted(cumulative, u, side="right")
         indices = np.clip(indices, 0, len(self.categories) - 1)
-        return np.array(self.categories, dtype=object)[indices]
+        values = np.array(self.categories, dtype=object)[indices]
+
+        if self.value_dtype == "int" and OTHER_CATEGORY not in self.categories:
+            return values.astype(np.int64)
+        if self.value_dtype == "float" and OTHER_CATEGORY not in self.categories:
+            return values.astype(np.float64)
+        if self.value_dtype == "bool" and OTHER_CATEGORY not in self.categories:
+            return values.astype(str) == "True"
+        return values
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -132,6 +155,7 @@ class CategoricalMarginal:
             "categories": self.categories,
             "probabilities": self.probabilities,
             "other_mass": self.other_mass,
+            "value_dtype": self.value_dtype,
         }
 
     @classmethod
@@ -140,6 +164,7 @@ class CategoricalMarginal:
             categories=data["categories"],
             probabilities=data["probabilities"],
             other_mass=data["other_mass"],
+            value_dtype=data.get("value_dtype", "str"),
         )
 
 
