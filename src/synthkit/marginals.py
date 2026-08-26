@@ -66,3 +66,77 @@ class NumericMarginal:
             quantile_values=data["quantile_values"],
             is_integer=data["is_integer"],
         )
+
+
+OTHER_CATEGORY = "__other__"
+DEFAULT_MAX_CATEGORIES = 50
+
+
+@dataclass
+class CategoricalMarginal:
+    """A category -> frequency table, ordered by descending frequency.
+
+    The order is significant, not cosmetic: `copula.py` maps a uniform draw into this same
+    ordered list of intervals, so two marginals fit on the same data must always produce the
+    same order for the copula's correlation structure to mean anything.
+    """
+
+    categories: list[str]
+    probabilities: list[float]
+    other_mass: float
+
+    @classmethod
+    def fit(
+        cls, values: pd.Series, max_categories: int = DEFAULT_MAX_CATEGORIES
+    ) -> "CategoricalMarginal":
+        clean = values.dropna().astype(str)
+        if clean.empty:
+            raise ValueError("cannot fit a categorical marginal on an all-null column")
+
+        first_seen = {}
+        for position, value in enumerate(clean):
+            first_seen.setdefault(value, position)
+
+        counts = clean.value_counts()
+        ordered = sorted(counts.index, key=lambda c: (-counts[c], first_seen[c]))
+
+        total = len(clean)
+        other_mass = 0.0
+        kept = ordered
+
+        if len(ordered) > max_categories:
+            kept = ordered[: max_categories - 1]
+            tail = ordered[max_categories - 1 :]
+            other_mass = sum(counts[c] for c in tail) / total
+
+        probabilities = [counts[c] / total for c in kept]
+
+        if other_mass > 0:
+            kept = [*kept, OTHER_CATEGORY]
+            probabilities = [*probabilities, other_mass]
+
+        return cls(categories=kept, probabilities=probabilities, other_mass=other_mass)
+
+    def sample(self, u: np.ndarray) -> np.ndarray:
+        cumulative = np.cumsum(self.probabilities)
+        # Guard against floating point drift leaving the top edge just under 1.0.
+        cumulative[-1] = 1.0
+        indices = np.searchsorted(cumulative, u, side="right")
+        indices = np.clip(indices, 0, len(self.categories) - 1)
+        return np.array(self.categories, dtype=object)[indices]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "kind": "categorical",
+            "categories": self.categories,
+            "probabilities": self.probabilities,
+            "other_mass": self.other_mass,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "CategoricalMarginal":
+        return cls(
+            categories=data["categories"],
+            probabilities=data["probabilities"],
+            other_mass=data["other_mass"],
+        )
