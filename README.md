@@ -126,8 +126,3 @@ mypy src/synthkit
 ## License
 
 MIT — see [LICENSE](LICENSE).
-
-
-
-
-
