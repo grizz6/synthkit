@@ -1,4 +1,7 @@
+import os
+
 import pandas as pd
+from pytest_synthkit.plugin import _load_profile
 
 import synthkit as sk
 
@@ -24,6 +27,25 @@ def test_synth_frame_fixture_is_discovered_and_emits_rows(pytester):
 
     result = pytester.runpytest()
     result.assert_outcomes(passed=1)
+
+
+def test_load_profile_cache_invalidates_when_file_is_overwritten(tmp_path):
+    # Regression test: _load_profile used to be cached on path alone, so a profile re-fit and
+    # saved over the same path mid test-session would silently keep serving the stale one.
+    path = tmp_path / "profile.json"
+
+    _write_profile(path)
+    first = _load_profile(str(path))
+    assert first.columns == ["amount"]
+
+    other_df = pd.DataFrame({"other_col": ["x", "y", "z"] * 20})
+    sk.fit(other_df).save(path)
+    # Ensure the mtime actually advances even on filesystems with coarse timestamp resolution.
+    stat = os.stat(path)
+    os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1))
+
+    second = _load_profile(str(path))
+    assert second.columns == ["other_col"]
 
 
 def test_synth_frame_is_deterministic_given_same_seed(pytester):

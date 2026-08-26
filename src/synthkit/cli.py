@@ -90,6 +90,7 @@ def check(
         profile_obj.column_types,
         holdout_fraction=holdout_fraction,
         min_dcr_ratio=min_dcr_ratio,
+        rare_combination_threshold=rare_combination_threshold,
     )
 
     typer.echo(f"dcr_ratio: {report.dcr_ratio:.3f} (min {min_dcr_ratio})")

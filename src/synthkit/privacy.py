@@ -104,6 +104,7 @@ def check(
     holdout_fraction: float = 0.2,
     min_dcr_ratio: float = 1.0,
     dcr_percentile: float = 5.0,
+    rare_combination_threshold: int = DEFAULT_RARE_COMBINATION_THRESHOLD,
     seed: int = 0,
 ) -> PrivacyReport:
     rng = np.random.default_rng(seed)
@@ -126,7 +127,9 @@ def check(
         c for c, t in column_types.items() if t in ("categorical", "boolean") and c in real.columns
     ]
     rare_leaks = (
-        count_rare_combination_leaks(synthetic, real, categorical_columns)
+        count_rare_combination_leaks(
+            synthetic, real, categorical_columns, threshold=rare_combination_threshold
+        )
         if len(categorical_columns) >= 2
         else 0
     )

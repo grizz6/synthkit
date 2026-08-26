@@ -22,4 +22,12 @@ Initial implementation of the core pipeline described in [docs/PLAN.md](docs/PLA
 - A worked example on the UCI Adult Census dataset (`examples/`) and a benchmark script
   (`scripts/benchmark.py`).
 
+### Fixed
+
+- `synthkit check --rare-combination-threshold` was parsed by the CLI but never reached
+  `privacy.check()`, so it silently had no effect regardless of the value passed.
+- `pytest-synthkit`'s `synth_frame` fixture cached a loaded `Profile` by file path alone for
+  the whole test session; a profile re-fit and overwritten mid-session was served stale from
+  cache. The cache now also keys on the file's mtime.
+
 Not yet published to PyPI. No version has been tagged.

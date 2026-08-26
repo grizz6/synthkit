@@ -1,3 +1,5 @@
+import re
+
 import numpy as np
 import pandas as pd
 from typer.testing import CliRunner
@@ -108,6 +110,45 @@ def test_check_fails_and_exits_nonzero_when_fixtures_are_real_data(tmp_path):
 
     assert result.exit_code == 1
     assert "FAILED" in result.output
+
+
+def test_check_rare_combination_threshold_flag_changes_the_result(tmp_path):
+    # Regression test: --rare-combination-threshold used to be parsed but never passed to
+    # privacy.check(), so it had zero effect regardless of what the user set it to.
+    rng = np.random.default_rng(0)
+    n = 500
+    region = np.array(rng.choice(["north", "south"], size=n, p=[0.5, 0.5]), dtype=object)
+    plan_tier = np.array(rng.choice(["basic", "pro"], size=n, p=[0.5, 0.5]), dtype=object)
+    region[:3] = "north"
+    plan_tier[:3] = "enterprise-rare"  # a (north, enterprise-rare) combo occurring only 3 times
+
+    df = pd.DataFrame({"region": region, "plan_tier": plan_tier})
+    data_path = tmp_path / "data.csv"
+    df.to_csv(data_path, index=False)
+    profile_path = tmp_path / "profile.json"
+    runner.invoke(app, ["fit", str(data_path), "-o", str(profile_path)])
+
+    # Using the real data as its own "fixtures" guarantees the rare combo is reproduced, so
+    # this isolates whether the threshold flag is honored rather than depending on sampling.
+    base_args = [
+        "check",
+        str(data_path),
+        "--profile",
+        str(profile_path),
+        "--real",
+        str(data_path),
+        "--min-dcr-ratio",
+        "0",
+    ]
+
+    default_result = runner.invoke(app, base_args)
+    lenient_result = runner.invoke(app, [*base_args, "--rare-combination-threshold", "1"])
+
+    default_leaks = int(re.search(r"rare_combination_leaks: (\d+)", default_result.output).group(1))
+    lenient_leaks = int(re.search(r"rare_combination_leaks: (\d+)", lenient_result.output).group(1))
+
+    assert default_leaks > 0
+    assert lenient_leaks == 0
 
 
 def test_diff_passes_when_no_drift(tmp_path):
