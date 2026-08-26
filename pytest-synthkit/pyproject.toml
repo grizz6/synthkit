@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pytest-synthkit"
+version = "0.0.1"
+description = "A pytest plugin providing fixtures backed by synthkit profiles."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "Grishma Gajurel" },
+]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Framework :: Pytest",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+]
+dependencies = [
+    "pytest>=7.0",
+    "synthkit>=0.0.1",
+]
+
+[project.entry-points.pytest11]
+synthkit = "pytest_synthkit.plugin"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pytest_synthkit"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
