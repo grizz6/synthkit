@@ -14,7 +14,6 @@ import pandas as pd
 
 CATEGORICAL_MAX_CARDINALITY = 20
 TEXT_CARDINALITY_RATIO = 0.5
-MIN_ROWS_FOR_IDENTIFIER = 10
 
 
 class ColumnType(str, enum.Enum):
@@ -65,7 +64,13 @@ def infer_column_type(series: pd.Series) -> ColumnType:
     # Everything else is treated as string-like.
     nunique = non_null.nunique()
 
-    if n >= MIN_ROWS_FOR_IDENTIFIER and nunique == n:
+    # No row-count floor here: a column where every value is unique is an identifier
+    # regardless of how few rows were fit on, because a CATEGORICAL classification stores
+    # every distinct value verbatim as a "category" — for an all-unique column that means
+    # memorizing 100% of the real values. Below ~10 rows there isn't enough data to tell
+    # "identifier" apart from "small categorical that happened to have no repeats" anyway, so
+    # the safe default is the one that never stores real values.
+    if nunique == n:
         return ColumnType.IDENTIFIER
 
     if nunique <= CATEGORICAL_MAX_CARDINALITY:

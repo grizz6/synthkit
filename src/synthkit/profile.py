@@ -150,7 +150,18 @@ class Profile:
                     )
                     for col in copula_columns
                 }
-                copula_dict = GaussianCopula.fit(uniform_columns).to_dict()
+                # A constant column (every fitted row has the same value) has a degenerate,
+                # zero-variance pseudo-uniform, which drives the correlation matrix to NaN and
+                # crashes Cholesky sampling downstream. Correlation with a constant is
+                # undefined anyway, so drop it from the copula; it still gets sampled
+                # independently from its own marginal in emit().
+                uniform_columns = {
+                    col: u for col, u in uniform_columns.items() if np.unique(u).size > 1
+                }
+                copula_columns = [c for c in copula_columns if c in uniform_columns]
+
+                if uniform_columns:
+                    copula_dict = GaussianCopula.fit(uniform_columns).to_dict()
             else:
                 copula_columns = []
 

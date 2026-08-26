@@ -104,12 +104,45 @@ def test_profile_contains_no_real_values():
         assert f"{value:.10f}" not in dumped
 
 
+def test_small_all_unique_string_column_does_not_leak_real_values():
+    # Regression test: a small (<10 row) all-unique string column used to be classified
+    # categorical, storing every real value verbatim and reproducing it in emitted output.
+    df = pd.DataFrame(
+        {
+            "customer_id": ["a1b2c3", "x9y8z7", "q4w5e6", "m1n2b3", "zzz111", "ccc222", "ddd333"],
+            "amount": [10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0],
+        }
+    )
+    profile = Profile.fit(df)
+    assert profile.column_types["customer_id"] == "identifier"
+    synthetic = profile.emit(n=20, seed=0)
+    assert not set(synthetic["customer_id"]) & set(df["customer_id"])
+
+
 def test_all_null_column_stays_null_after_emit():
     df = make_correlated_df(n=200)
     df["always_null"] = None
     profile = Profile.fit(df)
     synthetic = profile.emit(n=50, seed=0)
     assert synthetic["always_null"].isnull().all()
+
+
+def test_constant_column_does_not_crash_copula_fitting():
+    # Regression test: a zero-variance column used to poison the entire correlation matrix
+    # with NaN and crash Profile.fit with a LinAlgError from np.linalg.cholesky/eigh.
+    rng = np.random.default_rng(0)
+    n = 200
+    df = pd.DataFrame(
+        {
+            "age": rng.normal(40, 10, n),
+            "hours": rng.normal(40, 5, n),
+            "exchange_rate": [1.5] * n,
+        }
+    )
+    profile = Profile.fit(df)
+    assert "exchange_rate" not in profile.copula_columns
+    synthetic = profile.emit(n=50, seed=0)
+    assert (synthetic["exchange_rate"] == 1.5).all()
 
 
 def test_handles_small_dataset_below_copula_threshold():

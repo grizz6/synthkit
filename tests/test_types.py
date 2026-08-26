@@ -38,6 +38,14 @@ def test_all_unique_strings_is_identifier():
     assert infer_column_type(s) == ColumnType.IDENTIFIER
 
 
+def test_all_unique_strings_below_ten_rows_is_still_identifier():
+    # Regression test: a row-count floor used to let a small all-unique string column fall
+    # through to CATEGORICAL, which stores every distinct value verbatim as a "category" —
+    # for an all-unique column that means every real value leaks into the profile.
+    s = pd.Series(["a1b2c3", "x9y8z7", "q4w5e6", "m1n2b3", "zzz111"])
+    assert infer_column_type(s) == ColumnType.IDENTIFIER
+
+
 def test_low_cardinality_strings_is_categorical():
     s = pd.Series(["red", "green", "blue", "red", "green"] * 20)
     assert infer_column_type(s) == ColumnType.CATEGORICAL
