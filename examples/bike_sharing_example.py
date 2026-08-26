@@ -1,11 +1,14 @@
-"""A fourth real-dataset check: Bike Sharing, chosen for the one thing the other three don't
-have at all: a genuine datetime column.
+"""A fourth real-dataset check: Bike Sharing, chosen for two things the other three don't have.
 
-Adult Census, Titanic, and Wine Quality are all datetime-free, so `DatetimeMarginal` and its
-path through the copula (`_pseudo_uniform`'s epoch-seconds rank transform in `profile.py`) had
-only ever been exercised by synthetic unit-test data before this. Bike Sharing's `dteday`
-column is a real daily date series correlated with a real numeric target (rental count follows
-a yearly and weekly cycle), which is exactly the case that matters.
+First, a genuine datetime column: Adult Census, Titanic, and Wine Quality are all
+datetime-free, so `DatetimeMarginal` and its path through the copula (`_pseudo_uniform`'s
+epoch-seconds rank transform in `profile.py`) had only ever been exercised by synthetic
+unit-test data before this.
+
+Second, an exact derived-column relationship on real data: `cnt` is always precisely `casual +
+registered`, every single row, not an approximate correlation. That makes it a genuine
+real-world case for the `Derived` constraint (see Part 2, Step 4 of docs/PLAN.md) rather than
+a synthetic example invented to demonstrate it.
 
 Run with:
 
@@ -79,6 +82,24 @@ def main() -> None:
     report = sk.check(synthetic, profile, real=df, min_dcr_ratio=0.5)
     print(f"privacy check: dcr_ratio={report.dcr_ratio:.3f} exact_matches={report.exact_matches}")
     print(f"passed: {report.passed}")
+    print()
+
+    # cnt is exactly casual + registered in the real data, every single row -- a genuine
+    # derived-column relationship, not an approximate correlation. The copula models all three
+    # as separately-correlated numeric columns, so without declaring the relationship, it only
+    # holds by chance.
+    exact_without_constraint = (df["casual"] + df["registered"] == df["cnt"]).mean()
+    without_constraint = (synthetic["casual"] + synthetic["registered"] == synthetic["cnt"]).mean()
+    print(f"cnt == casual + registered, real data:              {exact_without_constraint:.3f}")
+    print(f"cnt == casual + registered, synthetic (no constraint): {without_constraint:.3f}")
+
+    profile_with_constraint = sk.fit(df, constraints=[sk.Derived("cnt", "casual + registered")])
+    synthetic_with_constraint = sk.emit(profile_with_constraint, n=len(df), seed=0)
+    with_constraint = (
+        synthetic_with_constraint["casual"] + synthetic_with_constraint["registered"]
+        == synthetic_with_constraint["cnt"]
+    ).mean()
+    print(f"cnt == casual + registered, synthetic (Derived constraint): {with_constraint:.3f}")
 
 
 if __name__ == "__main__":

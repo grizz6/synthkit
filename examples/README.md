@@ -65,3 +65,10 @@ time `DatetimeMarginal`'s path through the copula ran against real data — whic
 bug: the privacy check's per-column fidelity score compared real and synthetic dates in
 different units (microseconds vs seconds), reporting them as completely unrelated regardless
 of actual fidelity. Fixed; see CHANGELOG.md.
+
+It also has a genuine derived-column relationship on real data: `cnt` is always exactly
+`casual + registered`. Without declaring that as a `Derived` constraint, the copula (which
+models all three as separately-correlated numbers) reproduces the exact relationship in
+essentially none of the emitted rows (0.1%); with `sk.Derived("cnt", "casual + registered")`,
+it's exact in all of them (100%) — a real-data demonstration of exactly what the constraints
+DSL is for.
