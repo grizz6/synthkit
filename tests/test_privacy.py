@@ -80,3 +80,20 @@ def test_check_fails_when_synthetic_data_is_literally_the_training_data():
     report = check(synthetic, real, {"a": "continuous", "b": "categorical"}, min_dcr_ratio=1.0)
     assert not report.passed
     assert report.exact_matches > 0
+
+
+def test_check_scores_rare_combinations_pairwise_not_jointly():
+    # Regression test: scoring every categorical column jointly makes almost every combination
+    # "rare" purely from dimensionality (4 columns of 3 categories each spread over 300 rows
+    # gives up to 81 joint cells, most with a handful of rows, even though no single pair is
+    # remotely rare). check() should score pairs of columns, not the full cross product.
+    rng = np.random.default_rng(0)
+    n = 300
+    df = pd.DataFrame({f"cat{i}": rng.choice(["a", "b", "c"], size=n) for i in range(4)})
+    column_types = {f"cat{i}": "categorical" for i in range(4)}
+
+    joint_leaks = count_rare_combination_leaks(df, df, list(column_types), threshold=5)
+    assert joint_leaks > 0  # sanity: the joint check really is this aggressive
+
+    report = check(df, df, column_types, min_dcr_ratio=0.0)
+    assert report.rare_combination_leaks == 0

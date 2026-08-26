@@ -48,6 +48,25 @@ for `customers` linked to a `Profile` for `orders`) is out of scope for `v0.1` �
 project's own scope notes on multi-table support being the only extension worth considering,
 and only after real users ask for it.
 
+## Rare-combination leaks are scored pairwise, and small datasets still show plenty
+
+`privacy.check()` flags a synthetic row when *some pair* of categorical columns reproduces a
+combination that was rare (fewer than `--rare-combination-threshold`, default 5) in the real
+data. Pairs, not the full cross product of every categorical column: scoring all categorical
+columns jointly makes almost every combination "rare" purely from dimensionality — on the
+Titanic dataset (6 categorical columns, 891 rows), 123 of 160 distinct 6-way combinations
+occur fewer than 5 times, which would flag most rows regardless of actual re-identification
+risk (confirmed empirically: see [examples/titanic_example.py](../examples/titanic_example.py)).
+
+Pairwise scoring is a real fix for that combinatorial explosion, but it doesn't eliminate the
+underlying tension: a small real dataset with several categorical columns often *genuinely*
+has many rare pairwise strata (age bracket × embarkation port with only 3 real passengers, say),
+and a profile that preserves those strata's true frequency will keep reproducing them in
+synthetic output. On Titanic, this still flags roughly 9-10% of synthetic rows at the default
+threshold. That's an honest measurement of a real dataset's sparsity, not a false positive to
+suppress — loosen `rare_combination_threshold` (or judge by `dcr_ratio` alone) if that's an
+expected trade-off for your data, rather than treating a nonzero count as automatically wrong.
+
 ## Small datasets skip the copula entirely
 
 If fewer than 10 complete rows remain after dropping nulls across the copula-eligible columns,

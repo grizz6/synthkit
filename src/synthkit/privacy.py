@@ -11,6 +11,7 @@ memorizing rather than generalizing.
 
 from __future__ import annotations
 
+import itertools
 from dataclasses import dataclass
 
 import numpy as np
@@ -74,19 +75,37 @@ def count_exact_matches(synthetic: pd.DataFrame, real: pd.DataFrame) -> int:
     return sum(1 for row in synthetic_rows if row in real_rows)
 
 
+def _rare_combination_leak_mask(
+    synthetic: pd.DataFrame,
+    real: pd.DataFrame,
+    columns: list[str],
+    threshold: int,
+) -> np.ndarray:
+    real_counts = real[columns].astype(str).value_counts()
+    rare_combinations = set(real_counts[real_counts < threshold].index)
+    synthetic_combinations = list(map(tuple, synthetic[columns].astype(str).to_numpy()))
+    return np.array([combo in rare_combinations for combo in synthetic_combinations])
+
+
 def count_rare_combination_leaks(
     synthetic: pd.DataFrame,
     real: pd.DataFrame,
     columns: list[str],
     threshold: int = DEFAULT_RARE_COMBINATION_THRESHOLD,
 ) -> int:
-    """How many synthetic rows reproduce a real combination that appeared fewer than
-    `threshold` times — a rare combination is close to re-identifying, so any reproduction of
-    one at all is worth flagging even though a single exact-match check would miss it."""
-    real_counts = real[columns].astype(str).value_counts()
-    rare_combinations = set(real_counts[real_counts < threshold].index)
-    synthetic_combinations = map(tuple, synthetic[columns].astype(str).to_numpy())
-    return sum(1 for combo in synthetic_combinations if combo in rare_combinations)
+    """How many synthetic rows reproduce a real combination of exactly `columns` that appeared
+    fewer than `threshold` times — a rare combination is close to re-identifying, so any
+    reproduction of one at all is worth flagging even though a single exact-match check would
+    miss it.
+
+    Passing many columns at once makes almost every combination "rare" purely from
+    dimensionality (a handful of categorical columns can each have a small number of rare
+    combinations, but their full cross product mostly consists of combinations seen once or
+    twice, even with no real re-identification risk). `check()` accounts for this by scoring
+    pairs of columns rather than every categorical column jointly; call this function directly
+    with a larger column list only if you specifically want that stricter joint check.
+    """
+    return int(_rare_combination_leak_mask(synthetic, real, columns, threshold).sum())
 
 
 @dataclass
@@ -126,13 +145,20 @@ def check(
     categorical_columns = [
         c for c, t in column_types.items() if t in ("categorical", "boolean") and c in real.columns
     ]
-    rare_leaks = (
-        count_rare_combination_leaks(
-            synthetic, real, categorical_columns, threshold=rare_combination_threshold
-        )
-        if len(categorical_columns) >= 2
-        else 0
-    )
+    # Score pairs of categorical columns rather than every categorical column jointly: with
+    # more than a couple of categorical columns, almost every combination in their full cross
+    # product is "rare" purely from dimensionality, which would flag most rows regardless of
+    # actual re-identification risk. A leak is any synthetic row whose value on *some* pair
+    # reproduces a combination that was rare for that pair in the real data.
+    if len(categorical_columns) >= 2:
+        leak_mask = np.zeros(len(synthetic), dtype=bool)
+        for a, b in itertools.combinations(categorical_columns, 2):
+            leak_mask |= _rare_combination_leak_mask(
+                synthetic, real, [a, b], rare_combination_threshold
+            )
+        rare_leaks = int(leak_mask.sum())
+    else:
+        rare_leaks = 0
 
     return PrivacyReport(
         dcr_ratio=ratio,
