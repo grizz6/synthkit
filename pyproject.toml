@@ -30,6 +30,11 @@ dev = [
     "pytest>=7.0",
     "pyarrow>=14.0",
 ]
+docs = [
+    "mkdocs>=1.5",
+    "mkdocs-material>=9.5",
+    "pymdown-extensions>=10.0",
+]
 
 [project.scripts]
 synthkit = "synthkit.cli:app"
