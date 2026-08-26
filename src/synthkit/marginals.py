@@ -140,3 +140,82 @@ class CategoricalMarginal:
             probabilities=data["probabilities"],
             other_mass=data["other_mass"],
         )
+
+
+@dataclass
+class BooleanMarginal:
+    """A single Bernoulli probability."""
+
+    probability_true: float
+
+    @classmethod
+    def fit(cls, values: pd.Series) -> "BooleanMarginal":
+        clean = values.dropna()
+        if clean.empty:
+            raise ValueError("cannot fit a boolean marginal on an all-null column")
+        return cls(probability_true=float(clean.mean()))
+
+    def sample(self, u: np.ndarray) -> np.ndarray:
+        return u < self.probability_true
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"kind": "boolean", "probability_true": self.probability_true}
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "BooleanMarginal":
+        return cls(probability_true=data["probability_true"])
+
+
+# Candidate granularities in seconds, largest first: prefer the coarsest granularity that
+# every observed timestamp is an exact multiple of, so daily data emits at midnight rather
+# than at an arbitrary second.
+GRANULARITY_CANDIDATES_SECONDS = [86400, 3600, 60, 1]
+
+
+def _infer_granularity_seconds(epoch_seconds: np.ndarray) -> int:
+    for granularity in GRANULARITY_CANDIDATES_SECONDS:
+        if np.all(epoch_seconds % granularity == 0):
+            return granularity
+    return 1
+
+
+@dataclass
+class DatetimeMarginal:
+    """A numeric marginal over epoch seconds, re-quantized to the observed granularity."""
+
+    numeric: NumericMarginal
+    granularity_seconds: int
+
+    @classmethod
+    def fit(cls, values: pd.Series) -> "DatetimeMarginal":
+        clean = pd.to_datetime(values.dropna())
+        if clean.empty:
+            raise ValueError("cannot fit a datetime marginal on an all-null column")
+
+        # Cast through datetime64[s] rather than dividing a nanosecond int64 by 1e9: pandas'
+        # default datetime unit varies by version (ns historically, us/s increasingly), so
+        # going straight to whole seconds sidesteps having to know which one we got.
+        epoch_seconds = clean.to_numpy().astype("datetime64[s]").astype("int64")
+        granularity = _infer_granularity_seconds(epoch_seconds)
+        numeric = NumericMarginal.fit(pd.Series(epoch_seconds.astype(float)))
+
+        return cls(numeric=numeric, granularity_seconds=granularity)
+
+    def sample(self, u: np.ndarray) -> np.ndarray:
+        raw_seconds = self.numeric.sample(u)
+        quantized = np.round(raw_seconds / self.granularity_seconds) * self.granularity_seconds
+        return pd.to_datetime(quantized.astype("int64"), unit="s")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "kind": "datetime",
+            "numeric": self.numeric.to_dict(),
+            "granularity_seconds": self.granularity_seconds,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "DatetimeMarginal":
+        return cls(
+            numeric=NumericMarginal.from_dict(data["numeric"]),
+            granularity_seconds=data["granularity_seconds"],
+        )
