@@ -51,12 +51,28 @@ def _fidelity_by_column(
             real_values = real[column].dropna().astype(float)
             synthetic_values = synthetic[column].dropna().astype(float)
         elif ctype == "datetime":
-            real_values = pd.to_datetime(real[column].dropna()).astype("int64")
-            synthetic_values = pd.to_datetime(synthetic[column].dropna()).astype("int64")
+            # Cast through datetime64[s] rather than a bare int64: pandas' default datetime
+            # unit varies (ns historically, us/s increasingly, and can differ between two
+            # Series parsed at different times), so a plain .astype("int64") on each side can
+            # silently compare nanoseconds against seconds -- a factor-of-a-billion mismatch
+            # that makes ks_2samp report two disjoint distributions regardless of actual
+            # fidelity.
+            real_values = (
+                pd.to_datetime(real[column].dropna())
+                .to_numpy()
+                .astype("datetime64[s]")
+                .astype("int64")
+            )
+            synthetic_values = (
+                pd.to_datetime(synthetic[column].dropna())
+                .to_numpy()
+                .astype("datetime64[s]")
+                .astype("int64")
+            )
         else:
             continue
 
-        if real_values.empty or synthetic_values.empty:
+        if len(real_values) == 0 or len(synthetic_values) == 0:
             continue
 
         scores[column] = float(ks_2samp(real_values, synthetic_values).statistic)

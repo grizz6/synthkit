@@ -64,4 +64,13 @@ Initial implementation of the core pipeline described in [docs/PLAN.md](docs/PLA
   categoricals are now ordered by their actual value; genuinely nominal ones (strings) are
   unaffected and still ordered by frequency.
 
+- `synthkit.check()`'s per-column KS fidelity score for datetime columns cast each side to
+  `int64` directly with no unit normalization; real data parsed via `pd.to_datetime` (e.g.
+  from a CSV) is typically `datetime64[us]` while `DatetimeMarginal.sample` always emits
+  `datetime64[s]`, so the two sides differed by a factor of a million and `ks_2samp` reported
+  the distributions as completely disjoint (statistic `1.0`) regardless of actual fidelity.
+  Confirmed on the Bike Sharing dataset's `dteday` column. Both sides now normalize through
+  `datetime64[s]` first, matching the pattern already used correctly elsewhere in the
+  codebase (`profile.py`, `drift.py`, `privacy.py`).
+
 Not yet published to PyPI. No version has been tagged.

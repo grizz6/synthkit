@@ -52,3 +52,16 @@ Running this during development caught a severe bug: a low-cardinality numeric c
 `quality` rating) was ordered by frequency instead of by value for the copula, which silently
 destroyed its correlation with every other column (a constructed worst case went from a real
 correlation of 0.96 to a synthetic 0.02). Fixed; see CHANGELOG.md.
+
+## Bike Sharing: the one with a real datetime column
+
+```bash
+python examples/bike_sharing_example.py
+```
+
+731 daily rows with a genuine date column (`dteday`) correlated with a numeric target (rental
+count). None of the other three examples have a datetime column at all, so this was the first
+time `DatetimeMarginal`'s path through the copula ran against real data — which caught another
+bug: the privacy check's per-column fidelity score compared real and synthetic dates in
+different units (microseconds vs seconds), reporting them as completely unrelated regardless
+of actual fidelity. Fixed; see CHANGELOG.md.
