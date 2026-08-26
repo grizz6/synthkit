@@ -1,0 +1,142 @@
+import numpy as np
+import pandas as pd
+from typer.testing import CliRunner
+
+from synthkit.cli import app
+
+runner = CliRunner()
+
+
+def make_df(n=1000, seed=0):
+    rng = np.random.default_rng(seed)
+    return pd.DataFrame(
+        {
+            "amount": rng.normal(100, 20, n),
+            "plan_tier": rng.choice(["basic", "pro"], size=n, p=[0.7, 0.3]),
+        }
+    )
+
+
+def test_fit_writes_profile(tmp_path):
+    data_path = tmp_path / "data.csv"
+    make_df().to_csv(data_path, index=False)
+    profile_path = tmp_path / "profile.json"
+
+    result = runner.invoke(app, ["fit", str(data_path), "-o", str(profile_path)])
+
+    assert result.exit_code == 0, result.output
+    assert profile_path.exists()
+
+
+def test_fit_with_holdout_prints_self_check(tmp_path):
+    data_path = tmp_path / "data.csv"
+    make_df().to_csv(data_path, index=False)
+    profile_path = tmp_path / "profile.json"
+
+    result = runner.invoke(
+        app, ["fit", str(data_path), "-o", str(profile_path), "--holdout", "0.2"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "self-check" in result.output
+
+
+def test_emit_writes_synthetic_table(tmp_path):
+    data_path = tmp_path / "data.csv"
+    make_df().to_csv(data_path, index=False)
+    profile_path = tmp_path / "profile.json"
+    runner.invoke(app, ["fit", str(data_path), "-o", str(profile_path)])
+
+    output_path = tmp_path / "synthetic.csv"
+    result = runner.invoke(
+        app, ["emit", str(profile_path), "-n", "50", "--seed", "1", "-o", str(output_path)]
+    )
+
+    assert result.exit_code == 0, result.output
+    synthetic = pd.read_csv(output_path)
+    assert len(synthetic) == 50
+
+
+def test_check_passes_for_well_formed_fixtures(tmp_path):
+    data_path = tmp_path / "data.csv"
+    make_df(n=2000).to_csv(data_path, index=False)
+    profile_path = tmp_path / "profile.json"
+    runner.invoke(app, ["fit", str(data_path), "-o", str(profile_path)])
+
+    fixtures_path = tmp_path / "fixtures.csv"
+    runner.invoke(
+        app, ["emit", str(profile_path), "-n", "2000", "--seed", "0", "-o", str(fixtures_path)]
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "check",
+            str(fixtures_path),
+            "--profile",
+            str(profile_path),
+            "--real",
+            str(data_path),
+            "--min-dcr-ratio",
+            "0.5",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "PASSED" in result.output
+
+
+def test_check_fails_and_exits_nonzero_when_fixtures_are_real_data(tmp_path):
+    data_path = tmp_path / "data.csv"
+    make_df(n=500).to_csv(data_path, index=False)
+    profile_path = tmp_path / "profile.json"
+    runner.invoke(app, ["fit", str(data_path), "-o", str(profile_path)])
+
+    result = runner.invoke(
+        app,
+        [
+            "check",
+            str(data_path),
+            "--profile",
+            str(profile_path),
+            "--real",
+            str(data_path),
+            "--min-dcr-ratio",
+            "1.0",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "FAILED" in result.output
+
+
+def test_diff_passes_when_no_drift(tmp_path):
+    data_path = tmp_path / "data.csv"
+    make_df(seed=0).to_csv(data_path, index=False)
+    profile_path = tmp_path / "profile.json"
+    runner.invoke(app, ["fit", str(data_path), "-o", str(profile_path)])
+
+    fresh_path = tmp_path / "fresh.csv"
+    make_df(seed=1).to_csv(fresh_path, index=False)
+
+    result = runner.invoke(app, ["diff", str(profile_path), str(fresh_path)])
+
+    assert result.exit_code == 0, result.output
+    assert "PASSED" in result.output
+
+
+def test_diff_fails_and_exits_nonzero_on_drift(tmp_path):
+    data_path = tmp_path / "data.csv"
+    make_df(seed=0).to_csv(data_path, index=False)
+    profile_path = tmp_path / "profile.json"
+    runner.invoke(app, ["fit", str(data_path), "-o", str(profile_path)])
+
+    drifted = make_df(seed=1)
+    drifted["amount"] = drifted["amount"] + 500
+    drifted_path = tmp_path / "drifted.csv"
+    drifted.to_csv(drifted_path, index=False)
+
+    result = runner.invoke(app, ["diff", str(profile_path), str(drifted_path)])
+
+    assert result.exit_code == 1
+    assert "FAILED" in result.output
