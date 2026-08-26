@@ -34,6 +34,7 @@ jobs:
         run: |
           pip install ruff
           ruff check .
+          ruff format --check .
 
       - name: Test synthkit
         run: pytest tests/ -q
