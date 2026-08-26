@@ -13,13 +13,18 @@ import pandas as pd
 SUPPORTED_SUFFIXES = {".parquet", ".csv"}
 
 
+def _unsupported(suffix: str) -> ValueError:
+    supported = sorted(SUPPORTED_SUFFIXES)
+    return ValueError(f"unsupported file extension: {suffix!r} (expected one of {supported})")
+
+
 def read_table(path: str | Path) -> pd.DataFrame:
     path = Path(path)
     if path.suffix == ".parquet":
         return pd.read_parquet(path)
     if path.suffix == ".csv":
         return pd.read_csv(path)
-    raise ValueError(f"unsupported file extension: {path.suffix!r} (expected one of {sorted(SUPPORTED_SUFFIXES)})")
+    raise _unsupported(path.suffix)
 
 
 def write_table(df: pd.DataFrame, path: str | Path) -> None:
@@ -30,4 +35,4 @@ def write_table(df: pd.DataFrame, path: str | Path) -> None:
     elif path.suffix == ".csv":
         df.to_csv(path, index=False)
     else:
-        raise ValueError(f"unsupported file extension: {path.suffix!r} (expected one of {sorted(SUPPORTED_SUFFIXES)})")
+        raise _unsupported(path.suffix)

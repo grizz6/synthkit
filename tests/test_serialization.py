@@ -1,6 +1,6 @@
 import numpy as np
 
-from synthkit.serialization import canonicalize, dumps, load, dump
+from synthkit.serialization import canonicalize, dump, dumps, load
 
 
 def test_canonicalize_sorts_keys():

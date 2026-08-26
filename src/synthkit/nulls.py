@@ -25,7 +25,7 @@ class NullModel:
     probabilities: list[float]
 
     @classmethod
-    def fit(cls, df: pd.DataFrame, columns: list[str]) -> "NullModel":
+    def fit(cls, df: pd.DataFrame, columns: list[str]) -> NullModel:
         if not columns:
             return cls(columns=[], patterns=[], probabilities=[])
 
@@ -66,7 +66,7 @@ class NullModel:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "NullModel":
+    def from_dict(cls, data: dict[str, Any]) -> NullModel:
         return cls(
             columns=data["columns"],
             patterns=data["patterns"],

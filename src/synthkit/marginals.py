@@ -27,7 +27,7 @@ class NumericMarginal:
     is_integer: bool
 
     @classmethod
-    def fit(cls, values: pd.Series, n_knots: int = DEFAULT_N_KNOTS) -> "NumericMarginal":
+    def fit(cls, values: pd.Series, n_knots: int = DEFAULT_N_KNOTS) -> NumericMarginal:
         clean = values.dropna().to_numpy(dtype=float)
         if clean.size == 0:
             raise ValueError("cannot fit a numeric marginal on an all-null column")
@@ -61,7 +61,7 @@ class NumericMarginal:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "NumericMarginal":
+    def from_dict(cls, data: dict[str, Any]) -> NumericMarginal:
         return cls(
             quantile_levels=data["quantile_levels"],
             quantile_values=data["quantile_values"],
@@ -90,7 +90,7 @@ class CategoricalMarginal:
     @classmethod
     def fit(
         cls, values: pd.Series, max_categories: int = DEFAULT_MAX_CATEGORIES
-    ) -> "CategoricalMarginal":
+    ) -> CategoricalMarginal:
         # A low-cardinality integer or whole-valued float column is classified as categorical
         # (see types.py) but should still emit ints/floats, not the string representation used
         # internally for ordering and counting.
@@ -107,7 +107,7 @@ class CategoricalMarginal:
         if clean.empty:
             raise ValueError("cannot fit a categorical marginal on an all-null column")
 
-        first_seen = {}
+        first_seen: dict[str, int] = {}
         for position, value in enumerate(clean):
             first_seen.setdefault(value, position)
 
@@ -130,7 +130,10 @@ class CategoricalMarginal:
             probabilities = [*probabilities, other_mass]
 
         return cls(
-            categories=kept, probabilities=probabilities, other_mass=other_mass, value_dtype=value_dtype
+            categories=kept,
+            probabilities=probabilities,
+            other_mass=other_mass,
+            value_dtype=value_dtype,
         )
 
     def sample(self, u: np.ndarray) -> np.ndarray:
@@ -159,7 +162,7 @@ class CategoricalMarginal:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "CategoricalMarginal":
+    def from_dict(cls, data: dict[str, Any]) -> CategoricalMarginal:
         return cls(
             categories=data["categories"],
             probabilities=data["probabilities"],
@@ -175,7 +178,7 @@ class BooleanMarginal:
     probability_true: float
 
     @classmethod
-    def fit(cls, values: pd.Series) -> "BooleanMarginal":
+    def fit(cls, values: pd.Series) -> BooleanMarginal:
         clean = values.dropna()
         if clean.empty:
             raise ValueError("cannot fit a boolean marginal on an all-null column")
@@ -188,7 +191,7 @@ class BooleanMarginal:
         return {"kind": "boolean", "probability_true": self.probability_true}
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "BooleanMarginal":
+    def from_dict(cls, data: dict[str, Any]) -> BooleanMarginal:
         return cls(probability_true=data["probability_true"])
 
 
@@ -213,7 +216,7 @@ class DatetimeMarginal:
     granularity_seconds: int
 
     @classmethod
-    def fit(cls, values: pd.Series) -> "DatetimeMarginal":
+    def fit(cls, values: pd.Series) -> DatetimeMarginal:
         clean = pd.to_datetime(values.dropna())
         if clean.empty:
             raise ValueError("cannot fit a datetime marginal on an all-null column")
@@ -227,7 +230,7 @@ class DatetimeMarginal:
 
         return cls(numeric=numeric, granularity_seconds=granularity)
 
-    def sample(self, u: np.ndarray) -> np.ndarray:
+    def sample(self, u: np.ndarray) -> pd.DatetimeIndex:
         raw_seconds = self.numeric.sample(u)
         quantized = np.round(raw_seconds / self.granularity_seconds) * self.granularity_seconds
         return pd.to_datetime(quantized.astype("int64"), unit="s")
@@ -240,7 +243,7 @@ class DatetimeMarginal:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "DatetimeMarginal":
+    def from_dict(cls, data: dict[str, Any]) -> DatetimeMarginal:
         return cls(
             numeric=NumericMarginal.from_dict(data["numeric"]),
             granularity_seconds=data["granularity_seconds"],
@@ -263,7 +266,7 @@ class IdentifierMarginal:
     token_length: int = 8
 
     @classmethod
-    def fit(cls, values: pd.Series) -> "IdentifierMarginal":
+    def fit(cls, values: pd.Series) -> IdentifierMarginal:
         clean = values.dropna().astype(str)
         if clean.empty:
             raise ValueError("cannot fit an identifier marginal on an all-null column")
@@ -275,7 +278,7 @@ class IdentifierMarginal:
                 width = max(len(m.group(2)) for m in matches)  # type: ignore[union-attr]
                 return cls(style="sequential", prefix=next(iter(prefixes)), digit_width=width)
 
-        avg_length = int(round(clean.str.len().mean()))
+        avg_length = int(clean.str.len().mean().round())
         return cls(style="random_token", token_length=max(avg_length, 4))
 
     def sample(self, n: int, rng: np.random.Generator) -> np.ndarray:
@@ -307,7 +310,7 @@ class IdentifierMarginal:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "IdentifierMarginal":
+    def from_dict(cls, data: dict[str, Any]) -> IdentifierMarginal:
         return cls(
             style=data["style"],
             prefix=data.get("prefix", ""),
@@ -335,7 +338,7 @@ class TextMarginal:
     std_word_count: float
 
     @classmethod
-    def fit(cls, values: pd.Series, max_pool: int = DEFAULT_MAX_WORD_POOL) -> "TextMarginal":
+    def fit(cls, values: pd.Series, max_pool: int = DEFAULT_MAX_WORD_POOL) -> TextMarginal:
         clean = values.dropna().astype(str)
         if clean.empty:
             raise ValueError("cannot fit a text marginal on an all-null column")
@@ -377,7 +380,7 @@ class TextMarginal:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "TextMarginal":
+    def from_dict(cls, data: dict[str, Any]) -> TextMarginal:
         return cls(
             word_pool=data["word_pool"],
             mean_word_count=data["mean_word_count"],

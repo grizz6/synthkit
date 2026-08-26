@@ -8,7 +8,6 @@ those modules, not here, so it can be tested without going through subprocess-st
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 import typer
 
@@ -26,7 +25,7 @@ app = typer.Typer(add_completion=False, help="Synthetic test fixtures from a rea
 def fit(
     data: Path = typer.Argument(..., help="Real dataset to fit a profile on (.parquet or .csv)."),
     output: Path = typer.Option(..., "-o", "--output", help="Where to write profile.json."),
-    constraints: Optional[Path] = typer.Option(
+    constraints: Path | None = typer.Option(
         None, "--constraints", help="YAML file declaring business-rule constraints."
     ),
     holdout: float = typer.Option(
@@ -46,14 +45,16 @@ def fit(
     if holdout > 0:
         synthetic = profile.emit(n=len(df), seed=0)
         report = privacy.check(synthetic, df, profile.column_types, holdout_fraction=holdout)
-        typer.echo(f"self-check: dcr_ratio={report.dcr_ratio:.3f} exact_matches={report.exact_matches}")
+        typer.echo(
+            f"self-check: dcr_ratio={report.dcr_ratio:.3f} exact_matches={report.exact_matches}"
+        )
 
 
 @app.command()
 def emit(
     profile: Path = typer.Argument(..., help="profile.json produced by `synthkit fit`."),
     n: int = typer.Option(..., "-n", help="Number of synthetic rows to generate."),
-    seed: int = typer.Option(..., "--seed", help="Random seed; same seed always emits the same rows."),
+    seed: int = typer.Option(..., "--seed", help="Random seed; same seed always emits same rows."),
     output: Path = typer.Option(..., "-o", "--output", help="Where to write the synthetic table."),
 ) -> None:
     """Emit synthetic rows from a committed profile. Never touches real data."""
@@ -66,8 +67,10 @@ def emit(
 @app.command()
 def check(
     fixtures: Path = typer.Argument(..., help="Synthetic table produced by `synthkit emit`."),
-    profile: Path = typer.Option(..., "--profile", help="profile.json the fixtures were emitted from."),
-    real: Path = typer.Option(..., "--real", help="The original real dataset, for the privacy baseline."),
+    profile: Path = typer.Option(..., "--profile", help="profile.json the fixtures came from."),
+    real: Path = typer.Option(
+        ..., "--real", help="The original real dataset, for the DCR baseline."
+    ),
     min_dcr_ratio: float = typer.Option(
         1.0, "--min-dcr-ratio", help="Minimum acceptable synthetic/holdout DCR ratio."
     ),
@@ -117,7 +120,8 @@ def diff(
         typer.echo(f"{column}: {score:.3f}{flag}")
 
     if not report.passed:
-        typer.echo(f"FAILED: {len(report.drifted_columns)} column(s) drifted past {threshold}", err=True)
+        count = len(report.drifted_columns)
+        typer.echo(f"FAILED: {count} column(s) drifted past {threshold}", err=True)
         raise typer.Exit(code=1)
 
     typer.echo("PASSED: no drift detected")

@@ -40,9 +40,26 @@ packages = ["src/synthkit"]
 [tool.ruff]
 line-length = 100
 
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = [
+    "B008",  # Typer's Option()/Argument() as default values is the documented pattern.
+]
+
 [tool.mypy]
-python_version = "3.10"
-strict = true
+python_version = "3.12"
+disallow_untyped_defs = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+no_implicit_optional = true
+# warn_return_any is deliberately off: numpy/pandas operations routinely return values mypy
+# can only see as `Any`, and chasing every one of those with a cast would add noise without
+# catching real bugs in a numeric library like this one.
+
+[[tool.mypy.overrides]]
+module = ["pandas.*", "scipy.*", "yaml.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

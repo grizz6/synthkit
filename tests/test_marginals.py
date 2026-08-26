@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 from synthkit.marginals import NumericMarginal
 
@@ -36,11 +37,8 @@ def test_numeric_marginal_round_trip():
 
 def test_numeric_marginal_rejects_all_null_column():
     values = pd.Series([None, None, None], dtype=float)
-    try:
+    with pytest.raises(ValueError):
         NumericMarginal.fit(values)
-        assert False, "expected ValueError"
-    except ValueError:
-        pass
 
 
 def test_numeric_marginal_ignores_nulls_when_fitting():

@@ -19,7 +19,8 @@ FLOAT_PRECISION = 12
 
 def canonicalize(value: Any) -> Any:
     if isinstance(value, dict):
-        return {str(k): canonicalize(v) for k, v in sorted(value.items(), key=lambda kv: str(kv[0]))}
+        items = sorted(value.items(), key=lambda kv: str(kv[0]))
+        return {str(k): canonicalize(v) for k, v in items}
     if isinstance(value, (list, tuple)):
         return [canonicalize(v) for v in value]
     if isinstance(value, (np.floating, float)):

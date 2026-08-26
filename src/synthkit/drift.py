@@ -9,19 +9,25 @@ categorical/boolean ones, and reports which columns moved past a threshold.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import pandas as pd
 from scipy.stats import ks_2samp
 
-from synthkit.marginals import BooleanMarginal, CategoricalMarginal, DatetimeMarginal, NumericMarginal
+from synthkit.marginals import (
+    BooleanMarginal,
+    CategoricalMarginal,
+    DatetimeMarginal,
+    NumericMarginal,
+)
 from synthkit.profile import ALL_NULL_KIND, Profile
 
 REFERENCE_SAMPLE_SIZE = 2000
 DEFAULT_DRIFT_THRESHOLD = 0.1
 
 
-def _numeric_drift(marginal_dict: dict, current: pd.Series) -> float:
+def _numeric_drift(marginal_dict: dict[str, Any], current: pd.Series) -> float:
     marginal = NumericMarginal.from_dict(marginal_dict)
     reference = marginal.sample(np.linspace(0.0, 1.0, REFERENCE_SAMPLE_SIZE))
     clean = current.dropna().to_numpy(dtype=float)
@@ -30,7 +36,7 @@ def _numeric_drift(marginal_dict: dict, current: pd.Series) -> float:
     return float(ks_2samp(clean, reference).statistic)
 
 
-def _datetime_drift(marginal_dict: dict, current: pd.Series) -> float:
+def _datetime_drift(marginal_dict: dict[str, Any], current: pd.Series) -> float:
     marginal = DatetimeMarginal.from_dict(marginal_dict)
     reference = marginal.sample(np.linspace(0.0, 1.0, REFERENCE_SAMPLE_SIZE))
     reference_epoch = reference.to_numpy().astype("datetime64[s]").astype(float)
@@ -41,9 +47,9 @@ def _datetime_drift(marginal_dict: dict, current: pd.Series) -> float:
     return float(ks_2samp(current_epoch, reference_epoch).statistic)
 
 
-def _categorical_drift(marginal_dict: dict, current: pd.Series) -> float:
+def _categorical_drift(marginal_dict: dict[str, Any], current: pd.Series) -> float:
     marginal = CategoricalMarginal.from_dict(marginal_dict)
-    reference_probs = dict(zip(marginal.categories, marginal.probabilities))
+    reference_probs = dict(zip(marginal.categories, marginal.probabilities, strict=True))
     current_probs = current.dropna().astype(str).value_counts(normalize=True).to_dict()
     categories = set(reference_probs) | set(current_probs)
     return 0.5 * sum(
@@ -51,7 +57,7 @@ def _categorical_drift(marginal_dict: dict, current: pd.Series) -> float:
     )
 
 
-def _boolean_drift(marginal_dict: dict, current: pd.Series) -> float:
+def _boolean_drift(marginal_dict: dict[str, Any], current: pd.Series) -> float:
     marginal = BooleanMarginal.from_dict(marginal_dict)
     clean = current.dropna()
     if clean.empty:

@@ -7,14 +7,14 @@ from synthkit.profile import Profile
 __version__ = "0.0.1"
 
 __all__ = [
-    "fit",
-    "emit",
-    "check",
     "CheckReport",
-    "Profile",
-    "Inequality",
-    "Derived",
     "ConditionalNull",
-    "Unique",
+    "Derived",
     "ForeignKey",
+    "Inequality",
+    "Profile",
+    "Unique",
+    "check",
+    "emit",
+    "fit",
 ]

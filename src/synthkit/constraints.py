@@ -8,9 +8,10 @@ model and enforced afterward by `repair.py`.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Union
+from typing import Any
 
 import yaml
 
@@ -51,7 +52,7 @@ class ForeignKey:
     references: str
 
 
-Constraint = Union[Inequality, Derived, ConditionalNull, Unique, ForeignKey]
+Constraint = Inequality | Derived | ConditionalNull | Unique | ForeignKey
 
 _CONSTRAINT_TYPES: dict[str, type] = {
     "inequality": Inequality,
@@ -76,7 +77,7 @@ def _constraint_to_dict(constraint: Constraint) -> dict[str, Any]:
 
 
 def parse_constraints(
-    spec: str | Path | list[dict[str, Any] | Constraint] | dict[str, Any],
+    spec: str | Path | Sequence[dict[str, Any] | Constraint] | dict[str, Any],
 ) -> list[Constraint]:
     """Parse constraints from a YAML file path, a list of dicts or `Constraint` instances
     (the Python API accepts `sk.Inequality(...)` directly), or `{"constraints": [...]}`."""
@@ -88,10 +89,13 @@ def parse_constraints(
     if isinstance(data, dict):
         data = data.get("constraints", [])
 
-    return [
-        item if isinstance(item, tuple(_CONSTRAINT_TYPES.values())) else _constraint_from_dict(item)
-        for item in data
-    ]
+    return [_coerce_constraint(item) for item in data]
+
+
+def _coerce_constraint(item: dict[str, Any] | Constraint) -> Constraint:
+    if isinstance(item, dict):
+        return _constraint_from_dict(item)
+    return item
 
 
 def constraints_to_dicts(constraints: list[Constraint]) -> list[dict[str, Any]]:

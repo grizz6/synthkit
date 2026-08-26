@@ -13,6 +13,8 @@ right fix genuinely differs by constraint:
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import pandas as pd
 
@@ -56,7 +58,7 @@ def _repair_conditional_null(df: pd.DataFrame, constraint: ConditionalNull) -> p
 def _repair_unique(df: pd.DataFrame, columns: list[str], rng: np.random.Generator) -> pd.DataFrame:
     n = len(df)
     order = rng.permutation(n)
-    for i, column in enumerate(columns):
+    for column in columns:
         # Only the combination of all `columns` together needs to be unique; a single-column
         # constraint is the common case where this reduces to "every value is distinct".
         if len(columns) == 1:
@@ -70,7 +72,7 @@ def _repair_foreign_key(
     df: pd.DataFrame,
     constraint: ForeignKey,
     rng: np.random.Generator,
-    key_pools: dict[str, list],
+    key_pools: dict[str, list[Any]],
 ) -> pd.DataFrame:
     pool = key_pools.get(constraint.column)
     if pool:
@@ -82,7 +84,7 @@ def apply_constraints(
     df: pd.DataFrame,
     constraints: list[Constraint],
     rng: np.random.Generator | None = None,
-    key_pools: dict[str, list] | None = None,
+    key_pools: dict[str, list[Any]] | None = None,
 ) -> pd.DataFrame:
     """Repair `df` in place (on a copy) so it satisfies every constraint, in a fixed order."""
     rng = rng or np.random.default_rng()

@@ -31,7 +31,7 @@ from synthkit.types import ColumnType, infer_all_types
 
 ALL_NULL_KIND = "all_null"
 
-TYPE_TO_MARGINAL_CLASS: dict[ColumnType, type] = {
+TYPE_TO_MARGINAL_CLASS: dict[ColumnType, type[Any]] = {
     ColumnType.CONTINUOUS: NumericMarginal,
     ColumnType.DISCRETE: NumericMarginal,
     ColumnType.CATEGORICAL: CategoricalMarginal,
@@ -41,7 +41,7 @@ TYPE_TO_MARGINAL_CLASS: dict[ColumnType, type] = {
     ColumnType.TEXT: TextMarginal,
 }
 
-MARGINAL_CLASS_BY_KIND: dict[str, type] = {
+MARGINAL_CLASS_BY_KIND: dict[str, type[Any]] = {
     "numeric": NumericMarginal,
     "categorical": CategoricalMarginal,
     "boolean": BooleanMarginal,
@@ -113,7 +113,7 @@ class Profile:
         df: pd.DataFrame,
         column_types: dict[str, ColumnType] | None = None,
         constraints: list[Constraint] | str | Path | None = None,
-    ) -> "Profile":
+    ) -> Profile:
         columns = list(df.columns)
         types = infer_all_types(df, overrides=column_types)
 
@@ -232,12 +232,12 @@ class Profile:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Profile":
+    def from_dict(cls, data: dict[str, Any]) -> Profile:
         return cls(**data)
 
     def save(self, path: str | Path) -> None:
         serialization.dump(self.to_dict(), path)
 
     @classmethod
-    def load(cls, path: str | Path) -> "Profile":
+    def load(cls, path: str | Path) -> Profile:
         return cls.from_dict(serialization.load(path))

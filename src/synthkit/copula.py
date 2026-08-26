@@ -78,7 +78,7 @@ class GaussianCopula:
     correlation: list[list[float]]
 
     @classmethod
-    def fit(cls, uniform_columns: dict[str, np.ndarray]) -> "GaussianCopula":
+    def fit(cls, uniform_columns: dict[str, np.ndarray]) -> GaussianCopula:
         columns = list(uniform_columns)
         clipped = {
             col: np.clip(u, UNIFORM_EPSILON, 1 - UNIFORM_EPSILON)
@@ -108,5 +108,5 @@ class GaussianCopula:
         return {"columns": self.columns, "correlation": self.correlation}
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "GaussianCopula":
+    def from_dict(cls, data: dict[str, Any]) -> GaussianCopula:
         return cls(columns=data["columns"], correlation=data["correlation"])

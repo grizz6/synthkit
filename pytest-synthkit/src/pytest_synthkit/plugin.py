@@ -6,15 +6,16 @@ pytest plugins, not by searching for the library that happens to back them.
 
 from __future__ import annotations
 
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
 
 import pandas as pd
 import pytest
+
 from synthkit.profile import Profile
 
 
-@lru_cache(maxsize=None)
+@cache
 def _load_profile(path: str) -> Profile:
     return Profile.load(path)
 

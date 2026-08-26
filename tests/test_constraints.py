@@ -21,7 +21,11 @@ def test_parse_all_constraint_types():
     spec = [
         {"type": "inequality", "left": "a", "op": "<=", "right": "b"},
         {"type": "derived", "column": "total", "expr": "subtotal + tax"},
-        {"type": "conditional_null", "column": "cancelled_at", "null_when": "status != 'cancelled'"},
+        {
+            "type": "conditional_null",
+            "column": "cancelled_at",
+            "null_when": "status != 'cancelled'",
+        },
         {"type": "unique", "columns": ["customer_id"]},
         {"type": "foreign_key", "column": "customer_id", "references": "customers.id"},
     ]
