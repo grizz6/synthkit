@@ -56,6 +56,24 @@ def test_low_cardinality_integer_column_samples_back_as_int():
     assert sampled.dtype.kind in "iu"
 
 
+def test_numeric_column_with_other_bucket_still_casts_non_other_rows():
+    # Regression test: when tail-bucketing produced an __other__ category (only reachable via
+    # an explicit column_types override forcing a high-cardinality numeric column into
+    # CATEGORICAL), the dtype cast used to be skipped for the *entire* array, leaving every
+    # row -- not just the __other__ ones -- as a stringified numeral instead of a real int.
+    values = pd.Series(range(200))  # 200 distinct ints, forces tail-bucketing at max_categories
+    marginal = CategoricalMarginal.fit(values, max_categories=10)
+    assert marginal.value_dtype == "int"
+    assert OTHER_CATEGORY in marginal.categories
+
+    sampled = marginal.sample(np.linspace(0, 1, 100))
+    assert sampled.dtype.kind == "f"  # NaN-capable, since __other__ has no single real value
+    non_other = sampled[~np.isnan(sampled)]
+    assert len(non_other) > 0
+    kept_categories = {float(c) for c in marginal.categories if c != OTHER_CATEGORY}
+    assert set(non_other).issubset(kept_categories)
+
+
 def test_low_cardinality_float_column_samples_back_as_float():
     values = pd.Series([1.5, 2.5, 1.5, 2.5] * 20)
     marginal = CategoricalMarginal.fit(values)

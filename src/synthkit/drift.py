@@ -16,6 +16,7 @@ import pandas as pd
 from scipy.stats import ks_2samp
 
 from synthkit.marginals import (
+    OTHER_CATEGORY,
     BooleanMarginal,
     CategoricalMarginal,
     DatetimeMarginal,
@@ -50,7 +51,20 @@ def _datetime_drift(marginal_dict: dict[str, Any], current: pd.Series) -> float:
 def _categorical_drift(marginal_dict: dict[str, Any], current: pd.Series) -> float:
     marginal = CategoricalMarginal.from_dict(marginal_dict)
     reference_probs = dict(zip(marginal.categories, marginal.probabilities, strict=True))
-    current_probs = current.dropna().astype(str).value_counts(normalize=True).to_dict()
+    raw_current_probs = current.dropna().astype(str).value_counts(normalize=True).to_dict()
+
+    if OTHER_CATEGORY in reference_probs:
+        # The profile pooled rare categories into __other__ at fit time; fold any current
+        # category the profile doesn't recognize into the same bucket before comparing, so a
+        # rare category isn't counted twice — once as its own missing key, once as the
+        # unmatched slice of __other__'s pooled mass.
+        current_probs: dict[str, float] = {}
+        for category, prob in raw_current_probs.items():
+            key = category if category in reference_probs else OTHER_CATEGORY
+            current_probs[key] = current_probs.get(key, 0.0) + prob
+    else:
+        current_probs = raw_current_probs
+
     categories = set(reference_probs) | set(current_probs)
     return 0.5 * sum(
         abs(reference_probs.get(c, 0.0) - current_probs.get(c, 0.0)) for c in categories

@@ -63,6 +63,15 @@ categorical rather than continuous, per `types.py`'s heuristics. Its emitted dty
 to int/float/bool automatically, but the *value set* is fixed to exactly what was observed —
 a rating column that never saw a `5` in the fitted data will never emit a `5`.
 
+## Strict inequality repair can't nudge every dtype apart
+
+A strict constraint (`<` or `>`) that still has a tied row after the swap-based repair gets
+the tie broken by nudging one side by the smallest step the dtype supports: ±1 for integers,
+`np.nextafter` for floats, one second for datetimes. For any other dtype (most notably
+strings), there's no well-defined "smallest step," so a tie is left unresolved rather than
+guessed at — a strict inequality constraint declared between two string columns may still
+contain equal values after repair.
+
 ## Performance is not benchmarked past hundreds of thousands of rows
 
 The privacy check's Gower distance computation is a full pairwise comparison — O(n × m) in the

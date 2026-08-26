@@ -144,13 +144,24 @@ class CategoricalMarginal:
         indices = np.clip(indices, 0, len(self.categories) - 1)
         values = np.array(self.categories, dtype=object)[indices]
 
-        if self.value_dtype == "int" and OTHER_CATEGORY not in self.categories:
-            return values.astype(np.int64)
-        if self.value_dtype == "float" and OTHER_CATEGORY not in self.categories:
-            return values.astype(np.float64)
-        if self.value_dtype == "bool" and OTHER_CATEGORY not in self.categories:
+        if self.value_dtype not in ("int", "float", "bool"):
+            return values
+
+        other_mask = values == OTHER_CATEGORY
+        if not other_mask.any():
+            if self.value_dtype == "int":
+                return values.astype(np.int64)
+            if self.value_dtype == "float":
+                return values.astype(np.float64)
             return values.astype(str) == "True"
-        return values
+
+        # Some rows landed in the merged tail bucket, which has no single real value to cast
+        # back to (only reachable via an explicit column_types override forcing a
+        # high-cardinality numeric column into CATEGORICAL). Representing those as NaN keeps
+        # every other row's dtype correct instead of leaving the whole column stringified.
+        result = np.full(len(values), np.nan, dtype=np.float64)
+        result[~other_mask] = values[~other_mask].astype(np.float64)
+        return result
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -283,7 +294,13 @@ class IdentifierMarginal:
 
     def sample(self, n: int, rng: np.random.Generator) -> np.ndarray:
         if self.style == "sequential":
-            start = int(rng.integers(0, 1_000_000))
+            # Keep the emitted numbers within the fitted digit width whenever `n` allows, so
+            # e.g. fitted IDs like CUST001-CUST050 (digit_width=3) come back out as 3-digit
+            # numbers rather than a uniformly random 6-digit blowout that no longer resembles
+            # the source format.
+            max_value = 10**self.digit_width - 1
+            highest_start = max(max_value - n + 1, 0)
+            start = int(rng.integers(0, highest_start + 1))
             numbers = start + np.arange(n)
             width = max(self.digit_width, len(str(numbers[-1])) if n else self.digit_width)
             return np.array([f"{self.prefix}{num:0{width}d}" for num in numbers], dtype=object)

@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from synthkit.drift import compute_drift
+from synthkit.drift import DEFAULT_DRIFT_THRESHOLD, compute_drift
 from synthkit.profile import Profile
 
 
@@ -54,6 +54,31 @@ def test_max_drift_property_reports_the_worst_column():
 
     report = compute_drift(profile, drifted)
     assert report.max_drift == max(report.column_drift.values())
+
+
+def test_other_bucket_does_not_inflate_drift_for_unchanged_tail():
+    # Regression test: when the profile's categorical marginal pooled rare categories into
+    # __other__, comparing raw current-category frequencies against reference_probs double
+    # counted every individual rare category (once as its own missing key, once again as the
+    # unmatched slice of __other__'s mass) even when the tail distribution hadn't drifted at
+    # all — this could spuriously trip the drift threshold on an unchanged column.
+    rng = np.random.default_rng(0)
+    n = 5000
+    # 60 distinct rare categories (>50, so CategoricalMarginal tail-buckets some into __other__)
+    # plus one dominant category, sampled identically for both "fits" and "fresh" data.
+    categories = [f"cat_{i}" for i in range(60)]
+    weights = np.array([0.4] + [0.6 / 59] * 59)
+
+    def make(seed):
+        return pd.DataFrame({"tag": rng.choice(categories, size=n, p=weights)})
+
+    df = make(seed=0)
+    profile = Profile.fit(df)
+    assert "__other__" in profile.marginals["tag"]["categories"]  # sanity: tail-bucketing fired
+
+    fresh = make(seed=1)
+    report = compute_drift(profile, fresh)
+    assert report.column_drift["tag"] < DEFAULT_DRIFT_THRESHOLD
 
 
 def test_ignores_columns_not_present_in_current_data():

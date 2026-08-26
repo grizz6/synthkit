@@ -26,6 +26,66 @@ def test_inequality_leaves_satisfied_rows_untouched():
     pd.testing.assert_frame_equal(fixed, df)
 
 
+def test_strict_inequality_flags_ties_as_violations():
+    # Regression test: a strict "<" only checked for ">" (not ">="), so a tie (equal values)
+    # was never flagged and passed through unrepaired, leaving the strict constraint violated.
+    df = pd.DataFrame({"start": [5], "end": [5]})
+    fixed = apply_constraints(df, [Inequality("start", "<", "end")])
+    assert (fixed["start"] < fixed["end"]).all()
+
+
+def test_strict_inequality_nudges_integer_ties_apart():
+    df = pd.DataFrame({"start": [5, 1], "end": [5, 10]})
+    fixed = apply_constraints(df, [Inequality("start", "<", "end")])
+    assert (fixed["start"] < fixed["end"]).all()
+    assert fixed["start"].iloc[1] == 1 and fixed["end"].iloc[1] == 10  # untouched, not tied
+
+
+def test_strict_greater_than_nudges_ties_in_the_correct_direction():
+    df = pd.DataFrame({"a": [5], "b": [5]})
+    fixed = apply_constraints(df, [Inequality("a", ">", "b")])
+    assert (fixed["a"] > fixed["b"]).all()
+
+
+def test_non_strict_inequality_still_allows_ties():
+    df = pd.DataFrame({"a": [5], "b": [5]})
+    fixed = apply_constraints(df, [Inequality("a", "<=", "b")])
+    assert fixed["a"].iloc[0] == 5 and fixed["b"].iloc[0] == 5
+
+
+def test_multi_column_unique_preserves_non_colliding_rows():
+    # Regression test: multi-column Unique used to overwrite every listed column for every
+    # row with a fabricated token, discarding realistic sampled values wholesale instead of
+    # only disambiguating rows whose combination actually collides.
+    df = pd.DataFrame(
+        {
+            "first_name": ["Alice", "Bob", "Carol"],
+            "last_name": ["Smith", "Jones", "Smith"],
+        }
+    )
+    fixed = apply_constraints(
+        df, [Unique(["first_name", "last_name"])], rng=np.random.default_rng(0)
+    )
+    assert fixed["first_name"].tolist() == ["Alice", "Bob", "Carol"]
+    combos = list(zip(fixed["first_name"], fixed["last_name"], strict=True))
+    assert len(set(combos)) == len(combos)
+
+
+def test_multi_column_unique_disambiguates_actual_collisions():
+    df = pd.DataFrame(
+        {
+            "first_name": ["Alice", "Alice", "Alice"],
+            "last_name": ["Smith", "Smith", "Smith"],
+        }
+    )
+    fixed = apply_constraints(
+        df, [Unique(["first_name", "last_name"])], rng=np.random.default_rng(0)
+    )
+    combos = list(zip(fixed["first_name"], fixed["last_name"], strict=True))
+    assert len(set(combos)) == 3
+    assert (fixed["first_name"] == "Alice").all()  # only the last column was disambiguated
+
+
 def test_derived_column_is_recomputed():
     df = pd.DataFrame({"subtotal": [10.0, 20.0], "tax": [1.0, 2.0], "total": [0.0, 0.0]})
     fixed = apply_constraints(df, [Derived("total", "subtotal + tax")])

@@ -20,6 +20,17 @@ def test_identifier_sequential_sample_is_unique_and_formatted():
     assert all(s.startswith("CUST") for s in sampled)
 
 
+def test_identifier_sequential_sample_stays_within_fitted_digit_width():
+    # Regression test: the random start offset used to be drawn uniformly from [0, 1_000_000)
+    # regardless of the fitted digit width, so fitted 3-digit IDs like CUST001-CUST050 could
+    # come back out as CUST483920-CUST483969 — a completely different visual shape.
+    values = pd.Series([f"CUST{i:03d}" for i in range(1, 51)])
+    marginal = IdentifierMarginal.fit(values)
+    for seed in range(20):
+        sampled = marginal.sample(30, np.random.default_rng(seed))
+        assert all(len(s) == len("CUST001") for s in sampled)
+
+
 def test_identifier_falls_back_to_random_token_for_mixed_formats():
     values = pd.Series(["abc123", "xyz", "999", "hello-world"])
     marginal = IdentifierMarginal.fit(values)
