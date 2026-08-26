@@ -86,3 +86,90 @@ def test_ignores_columns_not_present_in_current_data():
     profile = Profile.fit(df)
     report = compute_drift(profile, df.drop(columns=["plan_tier"]))
     assert "plan_tier" not in report.column_drift
+
+
+def test_no_drift_for_unchanged_datetime_column():
+    rng = np.random.default_rng(0)
+    n = 1000
+    dates = pd.to_datetime("2024-01-01") + pd.to_timedelta(rng.integers(0, 365, n), unit="D")
+    df = pd.DataFrame({"signup_date": dates})
+    profile = Profile.fit(df)
+
+    fresh_dates = pd.to_datetime("2024-01-01") + pd.to_timedelta(
+        np.random.default_rng(1).integers(0, 365, n), unit="D"
+    )
+    fresh = pd.DataFrame({"signup_date": fresh_dates})
+
+    report = compute_drift(profile, fresh)
+    assert report.passed
+    assert report.column_drift["signup_date"] < DEFAULT_DRIFT_THRESHOLD
+
+
+def test_detects_datetime_drift():
+    rng = np.random.default_rng(0)
+    n = 1000
+    dates = pd.to_datetime("2024-01-01") + pd.to_timedelta(rng.integers(0, 365, n), unit="D")
+    df = pd.DataFrame({"signup_date": dates})
+    profile = Profile.fit(df)
+
+    shifted = pd.to_datetime("2026-01-01") + pd.to_timedelta(
+        np.random.default_rng(1).integers(0, 365, n), unit="D"
+    )
+    fresh = pd.DataFrame({"signup_date": shifted})
+
+    report = compute_drift(profile, fresh)
+    assert not report.passed
+    assert "signup_date" in report.drifted_columns
+
+
+def test_no_drift_for_unchanged_boolean_column():
+    rng = np.random.default_rng(0)
+    df = pd.DataFrame({"is_active": rng.choice([True, False], size=2000, p=[0.7, 0.3])})
+    profile = Profile.fit(df)
+
+    fresh = pd.DataFrame(
+        {"is_active": np.random.default_rng(1).choice([True, False], size=2000, p=[0.7, 0.3])}
+    )
+    report = compute_drift(profile, fresh)
+    assert report.column_drift["is_active"] < DEFAULT_DRIFT_THRESHOLD
+
+
+def test_detects_boolean_drift():
+    rng = np.random.default_rng(0)
+    df = pd.DataFrame({"is_active": rng.choice([True, False], size=2000, p=[0.7, 0.3])})
+    profile = Profile.fit(df)
+
+    fresh = pd.DataFrame(
+        {"is_active": np.random.default_rng(1).choice([True, False], size=2000, p=[0.1, 0.9])}
+    )
+    report = compute_drift(profile, fresh)
+    assert not report.passed
+    assert "is_active" in report.drifted_columns
+
+
+def test_identifier_and_text_columns_are_skipped_for_drift():
+    # user_id is all-unique (identifier); notes has 35 distinct free-text values across 60
+    # rows -- high cardinality but with repeats, landing it in TEXT rather than IDENTIFIER.
+    notes_values = [f"note number {i} with some words" for i in range(35)]
+    df = pd.DataFrame(
+        {
+            "user_id": [f"user_{i}" for i in range(60)],
+            "notes": notes_values + notes_values[:25],
+        }
+    )
+    assert df["notes"].nunique() == 35  # sanity: high cardinality, but not all-unique
+
+    profile = Profile.fit(df)
+    assert profile.column_types["user_id"] == "identifier"
+    assert profile.column_types["notes"] == "text"
+
+    report = compute_drift(profile, df)
+    assert report.column_drift == {}
+
+
+def test_numeric_drift_is_zero_when_current_column_is_all_null():
+    df = pd.DataFrame({"amount": np.random.default_rng(0).normal(100, 20, 500)})
+    profile = Profile.fit(df)
+    fresh = pd.DataFrame({"amount": [None] * 100})
+    report = compute_drift(profile, fresh)
+    assert report.column_drift["amount"] == 0.0

@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 from synthkit.marginals import OTHER_CATEGORY, CategoricalMarginal
 
@@ -105,3 +106,9 @@ def test_string_column_still_samples_as_object():
     assert marginal.value_dtype == "str"
     sampled = marginal.sample(np.linspace(0, 1, 10))
     assert sampled.dtype == object
+
+
+def test_rejects_all_null_column():
+    values = pd.Series([None, None, None], dtype=object)
+    with pytest.raises(ValueError):
+        CategoricalMarginal.fit(values)

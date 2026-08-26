@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 from synthkit.marginals import BooleanMarginal, DatetimeMarginal
 
@@ -59,3 +60,15 @@ def test_datetime_round_trip():
     restored = DatetimeMarginal.from_dict(marginal.to_dict())
     u = np.linspace(0, 1, 10)
     assert (marginal.sample(u) == restored.sample(u)).all()
+
+
+def test_boolean_marginal_rejects_all_null_column():
+    values = pd.Series([None, None], dtype=object)
+    with pytest.raises(ValueError):
+        BooleanMarginal.fit(values)
+
+
+def test_datetime_marginal_rejects_all_null_column():
+    values = pd.Series([None, None], dtype="datetime64[ns]")
+    with pytest.raises(ValueError):
+        DatetimeMarginal.fit(values)

@@ -53,6 +53,34 @@ def test_non_strict_inequality_still_allows_ties():
     assert fixed["a"].iloc[0] == 5 and fixed["b"].iloc[0] == 5
 
 
+def test_strict_inequality_nudges_float_ties_by_the_smallest_representable_step():
+    df = pd.DataFrame({"start": [5.0], "end": [5.0]})
+    fixed = apply_constraints(df, [Inequality("start", "<", "end")])
+    assert fixed["start"].iloc[0] < fixed["end"].iloc[0]
+    # A "smallest step" nudge should be imperceptibly small, not a large jump.
+    assert fixed["end"].iloc[0] - fixed["start"].iloc[0] < 1e-9
+
+
+def test_strict_inequality_nudges_datetime_ties_by_one_second():
+    df = pd.DataFrame(
+        {
+            "start": pd.to_datetime(["2024-01-01 00:00:00"]),
+            "end": pd.to_datetime(["2024-01-01 00:00:00"]),
+        }
+    )
+    fixed = apply_constraints(df, [Inequality("start", "<", "end")])
+    assert fixed["start"].iloc[0] < fixed["end"].iloc[0]
+    assert (fixed["end"].iloc[0] - fixed["start"].iloc[0]) == pd.Timedelta(seconds=1)
+
+
+def test_strict_inequality_leaves_string_ties_unresolved():
+    # Documented limitation: there's no well-defined "smallest step" for strings, so a tie
+    # between two string columns is left as-is rather than guessed at.
+    df = pd.DataFrame({"a": ["m"], "b": ["m"]})
+    fixed = apply_constraints(df, [Inequality("a", "<", "b")])
+    assert fixed["a"].iloc[0] == "m" and fixed["b"].iloc[0] == "m"
+
+
 def test_multi_column_unique_preserves_non_colliding_rows():
     # Regression test: multi-column Unique used to overwrite every listed column for every
     # row with a fabricated token, discarding realistic sampled values wholesale instead of

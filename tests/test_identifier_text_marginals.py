@@ -1,7 +1,8 @@
 import numpy as np
 import pandas as pd
+import pytest
 
-from synthkit.marginals import IdentifierMarginal, TextMarginal
+from synthkit.marginals import DEFAULT_MAX_WORD_POOL, IdentifierMarginal, TextMarginal
 
 
 def test_identifier_detects_sequential_pattern():
@@ -78,3 +79,23 @@ def test_text_marginal_round_trip():
     marginal = TextMarginal.fit(values)
     restored = TextMarginal.from_dict(marginal.to_dict())
     assert restored == marginal
+
+
+def test_identifier_marginal_rejects_all_null_column():
+    values = pd.Series([None, None], dtype=object)
+    with pytest.raises(ValueError):
+        IdentifierMarginal.fit(values)
+
+
+def test_text_marginal_rejects_all_null_column():
+    values = pd.Series([None, None], dtype=object)
+    with pytest.raises(ValueError):
+        TextMarginal.fit(values)
+
+
+def test_text_marginal_caps_word_pool_size():
+    # A column with far more distinct words than DEFAULT_MAX_WORD_POOL should have its vocabulary
+    # subsampled rather than growing the profile unboundedly.
+    values = pd.Series([f"word{i} word{i + 1} word{i + 2}" for i in range(DEFAULT_MAX_WORD_POOL)])
+    marginal = TextMarginal.fit(values)
+    assert len(marginal.word_pool) == DEFAULT_MAX_WORD_POOL
