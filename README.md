@@ -104,7 +104,8 @@ def test_billing_rollup(synth_frame):
    real records" is measured, not asserted
    ([src/synthkit/privacy.py](src/synthkit/privacy.py)).
 
-See [docs/LIMITATIONS.md](docs/LIMITATIONS.md) for what this deliberately does not do.
+See [docs/getting-started.md](docs/getting-started.md) for a full walkthrough and
+[docs/LIMITATIONS.md](docs/LIMITATIONS.md) for what this deliberately does not do.
 
 ## Relationship to SDV
 

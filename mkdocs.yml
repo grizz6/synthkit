@@ -8,6 +8,7 @@ theme:
 
 nav:
   - Home: index.md
+  - Getting started: getting-started.md
   - Limitations: LIMITATIONS.md
   - Plan: PLAN.md
 
