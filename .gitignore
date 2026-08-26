@@ -13,3 +13,4 @@ venv/
 htmlcov/
 .DS_Store
 *.parquet
+examples/data/
