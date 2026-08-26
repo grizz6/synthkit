@@ -56,6 +56,30 @@ def test_correlation_structure_is_preserved():
     assert abs(real_corr - synth_corr) < 0.1
 
 
+def test_correlation_with_low_cardinality_numeric_column_is_preserved():
+    # Regression test: a low-cardinality numeric column (classified categorical by types.py)
+    # used to be ordered by descending frequency for the copula, which scrambles its natural
+    # numeric order whenever the value counts don't happen to already be monotonic -- silently
+    # destroying its correlation with everything else. A "rating" correlated with "amount",
+    # with counts peaking in the middle (order [3,4,2,5,1], not [1,2,3,4,5]), exercises exactly
+    # that case.
+    rng = np.random.default_rng(0)
+    n = 3000
+    rating = rng.choice([1, 2, 3, 4, 5], size=n, p=[0.05, 0.15, 0.4, 0.3, 0.1])
+    amount = rating * 10 + rng.normal(0, 3, n)
+    df = pd.DataFrame({"rating": rating, "amount": amount})
+
+    profile = Profile.fit(df)
+    synthetic = profile.emit(n=n, seed=0)
+
+    real_corr = np.corrcoef(df["rating"], df["amount"])[0, 1]
+    synth_corr = np.corrcoef(synthetic["rating"].astype(float), synthetic["amount"].astype(float))[
+        0, 1
+    ]
+    assert real_corr > 0.5  # sanity: the constructed correlation really is strong
+    assert abs(real_corr - synth_corr) < 0.15
+
+
 def test_conditional_null_pattern_is_roughly_preserved():
     df = make_correlated_df(n=5000)
     profile = Profile.fit(df)

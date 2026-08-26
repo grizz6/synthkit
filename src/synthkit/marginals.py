@@ -107,12 +107,24 @@ class CategoricalMarginal:
         if clean.empty:
             raise ValueError("cannot fit a categorical marginal on an all-null column")
 
-        first_seen: dict[str, int] = {}
-        for position, value in enumerate(clean):
-            first_seen.setdefault(value, position)
-
         counts = clean.value_counts()
-        ordered = sorted(counts.index, key=lambda c: (-counts[c], first_seen[c]))
+
+        if value_dtype == "bool":
+            ordered = sorted(counts.index, key=lambda c: c == "True")
+        elif value_dtype in ("int", "float"):
+            # A low-cardinality *numeric* column (a rating, a small count) still has a natural
+            # order that the copula's rank correlation with other numeric columns depends on.
+            # Ordering by descending frequency instead -- the right call for a genuinely
+            # nominal categorical, see the `else` branch -- would scramble that order (real
+            # example: a 1-5 rating whose value counts happen to peak at 3 then 4 gets ordered
+            # [3, 4, 2, 5, 1], which no longer corresponds to rating order at all) and silently
+            # destroy any correlation this column has with anything else.
+            ordered = sorted(counts.index, key=float)
+        else:
+            first_seen: dict[str, int] = {}
+            for position, value in enumerate(clean):
+                first_seen.setdefault(value, position)
+            ordered = sorted(counts.index, key=lambda c: (-counts[c], first_seen[c]))
 
         total = len(clean)
         other_mass = 0.0

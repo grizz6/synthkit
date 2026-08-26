@@ -52,5 +52,16 @@ Initial implementation of the core pipeline described in [docs/PLAN.md](docs/PLA
   cast for the *entire* sampled column, not just the bucketed rows, when reachable via an
   explicit `column_types` override on a high-cardinality numeric column. Non-`__other__` rows
   are now cast correctly; `__other__` rows become `NaN`.
+- `privacy.check()`'s rare-combination check scored every categorical column jointly, which
+  makes almost every combination "rare" purely from dimensionality (confirmed on Titanic: 123
+  of 160 six-way combinations occur under the default threshold). Now scored pairwise instead.
+- **Severe:** a low-cardinality numeric column (a 1-5 rating, a small count — classified
+  categorical per `types.py`'s heuristics) was ordered by descending frequency for the
+  copula, same as a genuinely nominal categorical. Since frequency order rarely matches
+  numeric order, this silently destroyed the column's correlation with everything else —
+  confirmed on a constructed case where a real correlation of 0.96 came back as 0.02, and on
+  Wine Quality's `quality` rating (see `examples/wine_quality_example.py`). Numeric-valued
+  categoricals are now ordered by their actual value; genuinely nominal ones (strings) are
+  unaffected and still ordered by frequency.
 
 Not yet published to PyPI. No version has been tagged.

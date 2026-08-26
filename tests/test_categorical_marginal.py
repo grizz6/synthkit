@@ -11,6 +11,23 @@ def test_categories_ordered_by_descending_frequency():
     assert marginal.probabilities[0] > marginal.probabilities[1] > marginal.probabilities[2]
 
 
+def test_numeric_categories_ordered_by_value_not_frequency():
+    # Regression test: a low-cardinality numeric column (a rating, a small count) still has a
+    # natural order that the copula's rank correlation with other numeric columns depends on.
+    # Ordering by descending frequency instead -- correct for a genuinely nominal categorical
+    # like a color -- silently scrambled that order: a wine-quality-style rating peaking at
+    # 5 and 6 used to order as [5, 6, 7, 4, 8, 3] instead of [3, 4, 5, 6, 7, 8].
+    values = pd.Series([5] * 68 + [6] * 64 + [7] * 20 + [4] * 5 + [8] * 2 + [3] * 1)
+    marginal = CategoricalMarginal.fit(values)
+    assert marginal.categories == ["3", "4", "5", "6", "7", "8"]
+
+
+def test_boolean_dtype_categories_ordered_false_before_true():
+    values = pd.Series([True, True, True, False])
+    marginal = CategoricalMarginal.fit(values)
+    assert marginal.categories == ["False", "True"]
+
+
 def test_probabilities_sum_to_one():
     values = pd.Series(np.random.default_rng(0).choice(["x", "y", "z"], size=1000))
     marginal = CategoricalMarginal.fit(values)

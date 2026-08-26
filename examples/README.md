@@ -27,3 +27,28 @@ That's the whole argument: a test whose correctness depends on the correlation b
 columns passes against real data and against synthkit's output, and fails against
 independently-shuffled data — which is what sampling each column's marginal with no joint
 model produces.
+
+## Titanic: nulls, free text, and messy identifiers
+
+```bash
+python examples/titanic_example.py
+```
+
+A smaller (891-row), messier dataset: `Cabin` is null ~77% of the time, `Name` is entirely
+unique (an identifier), and there are six categorical columns at once. This is also what
+surfaced two real bugs during development — a small all-unique-string privacy leak and a
+combinatorial blowup in the rare-combination privacy check — both fixed and covered by
+regression tests; see [CHANGELOG.md](../CHANGELOG.md) and [docs/LIMITATIONS.md](../docs/LIMITATIONS.md).
+
+## Wine Quality: correlation fidelity across many numeric columns at once
+
+```bash
+python examples/wine_quality_example.py
+```
+
+1,599 rows, 12 almost-entirely-continuous columns, no nulls — a clean stress test for whether
+the copula preserves the *whole* correlation matrix (66 pairs), not just one hand-picked pair.
+Running this during development caught a severe bug: a low-cardinality numeric column (the
+`quality` rating) was ordered by frequency instead of by value for the copula, which silently
+destroyed its correlation with every other column (a constructed worst case went from a real
+correlation of 0.96 to a synthetic 0.02). Fixed; see CHANGELOG.md.
