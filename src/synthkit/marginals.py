@@ -8,6 +8,7 @@ value, which is exactly the interface the Gaussian copula in `copula.py` needs.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -218,4 +219,142 @@ class DatetimeMarginal:
         return cls(
             numeric=NumericMarginal.from_dict(data["numeric"]),
             granularity_seconds=data["granularity_seconds"],
+        )
+
+
+_PREFIX_DIGITS_PATTERN = re.compile(r"^(\D*)(\d+)$")
+DEFAULT_TOKEN_CHARSET = "abcdefghijklmnopqrstuvwxyz0123456789"
+
+
+@dataclass
+class IdentifierMarginal:
+    """A regenerated identifier format. Identifiers are never modeled statistically — per the
+    project's own rule, doing so would just be memorizing real keys — only their *shape* is.
+    """
+
+    style: str  # "sequential" or "random_token"
+    prefix: str = ""
+    digit_width: int = 0
+    token_length: int = 8
+
+    @classmethod
+    def fit(cls, values: pd.Series) -> "IdentifierMarginal":
+        clean = values.dropna().astype(str)
+        if clean.empty:
+            raise ValueError("cannot fit an identifier marginal on an all-null column")
+
+        matches = [_PREFIX_DIGITS_PATTERN.fullmatch(v) for v in clean]
+        if all(matches):
+            prefixes = {m.group(1) for m in matches}  # type: ignore[union-attr]
+            if len(prefixes) == 1:
+                width = max(len(m.group(2)) for m in matches)  # type: ignore[union-attr]
+                return cls(style="sequential", prefix=next(iter(prefixes)), digit_width=width)
+
+        avg_length = int(round(clean.str.len().mean()))
+        return cls(style="random_token", token_length=max(avg_length, 4))
+
+    def sample(self, n: int, rng: np.random.Generator) -> np.ndarray:
+        if self.style == "sequential":
+            start = int(rng.integers(0, 1_000_000))
+            numbers = start + np.arange(n)
+            width = max(self.digit_width, len(str(numbers[-1])) if n else self.digit_width)
+            return np.array([f"{self.prefix}{num:0{width}d}" for num in numbers], dtype=object)
+
+        charset = np.array(list(DEFAULT_TOKEN_CHARSET))
+        seen: set[str] = set()
+        tokens: list[str] = []
+        while len(tokens) < n:
+            batch = rng.choice(charset, size=(n - len(tokens), self.token_length))
+            for row in batch:
+                token = "".join(row)
+                if token not in seen:
+                    seen.add(token)
+                    tokens.append(token)
+        return np.array(tokens, dtype=object)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "kind": "identifier",
+            "style": self.style,
+            "prefix": self.prefix,
+            "digit_width": self.digit_width,
+            "token_length": self.token_length,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "IdentifierMarginal":
+        return cls(
+            style=data["style"],
+            prefix=data.get("prefix", ""),
+            digit_width=data.get("digit_width", 0),
+            token_length=data.get("token_length", 8),
+        )
+
+
+DEFAULT_MAX_WORD_POOL = 5000
+
+
+@dataclass
+class TextMarginal:
+    """Free text, approximated by resampling words from the observed vocabulary.
+
+    This is deliberately not a language model and not a verbatim bootstrap of real strings —
+    reproducing an exact original sentence would defeat the entire point of the package. What
+    it preserves is rough vocabulary and sentence length, nothing more. Free-text columns that
+    contain PII (names, notes, complaint text) should be reviewed by a human before a profile
+    built from them is shared; word-level resampling is not by itself a privacy guarantee.
+    """
+
+    word_pool: list[str]
+    mean_word_count: float
+    std_word_count: float
+
+    @classmethod
+    def fit(cls, values: pd.Series, max_pool: int = DEFAULT_MAX_WORD_POOL) -> "TextMarginal":
+        clean = values.dropna().astype(str)
+        if clean.empty:
+            raise ValueError("cannot fit a text marginal on an all-null column")
+
+        word_counts = clean.str.split().str.len()
+        words = [word for value in clean for word in value.split()]
+
+        if len(words) > max_pool:
+            rng = np.random.default_rng(0)
+            words = list(rng.choice(words, size=max_pool, replace=False))
+        if not words:
+            words = [""]
+
+        return cls(
+            word_pool=words,
+            mean_word_count=float(word_counts.mean()),
+            std_word_count=float(word_counts.std(ddof=0) or 0.0),
+        )
+
+    def sample(self, n: int, rng: np.random.Generator) -> np.ndarray:
+        if self.std_word_count > 0:
+            counts = rng.normal(self.mean_word_count, self.std_word_count, size=n)
+        else:
+            counts = np.full(n, self.mean_word_count)
+        counts = np.clip(np.round(counts), 1, None).astype(int)
+
+        pool = np.array(self.word_pool)
+        return np.array(
+            [" ".join(rng.choice(pool, size=c)) for c in counts],
+            dtype=object,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "kind": "text",
+            "word_pool": self.word_pool,
+            "mean_word_count": self.mean_word_count,
+            "std_word_count": self.std_word_count,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "TextMarginal":
+        return cls(
+            word_pool=data["word_pool"],
+            mean_word_count=data["mean_word_count"],
+            std_word_count=data["std_word_count"],
         )
