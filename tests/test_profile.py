@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import ks_2samp
 
+from synthkit.constraints import Inequality
 from synthkit.profile import Profile
 
 
@@ -116,3 +117,23 @@ def test_handles_small_dataset_below_copula_threshold():
     profile = Profile.fit(df)
     synthetic = profile.emit(n=10, seed=0)
     assert len(synthetic) == 10
+
+
+def test_fit_with_constraints_enforces_them_on_emit():
+    rng = np.random.default_rng(0)
+    n = 500
+    df = pd.DataFrame(
+        {
+            "created_at": rng.integers(0, 1000, n).astype(float),
+            "updated_at": rng.integers(0, 1000, n).astype(float),
+        }
+    )
+    profile = Profile.fit(df, constraints=[Inequality("created_at", "<=", "updated_at")])
+    synthetic = profile.emit(n=500, seed=0)
+    assert (synthetic["created_at"] <= synthetic["updated_at"]).all()
+
+
+def test_profile_without_constraints_has_empty_constraint_list():
+    df = pd.DataFrame({"a": [1.0, 2.0, 3.0] * 10})
+    profile = Profile.fit(df)
+    assert profile.constraints == []

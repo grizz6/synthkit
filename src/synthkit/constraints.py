@@ -75,8 +75,11 @@ def _constraint_to_dict(constraint: Constraint) -> dict[str, Any]:
     return {"type": kind, **vars(constraint)}
 
 
-def parse_constraints(spec: str | Path | list[dict[str, Any]] | dict[str, Any]) -> list[Constraint]:
-    """Parse constraints from a YAML file path, a raw list of dicts, or `{"constraints": [...]}`."""
+def parse_constraints(
+    spec: str | Path | list[dict[str, Any] | Constraint] | dict[str, Any],
+) -> list[Constraint]:
+    """Parse constraints from a YAML file path, a list of dicts or `Constraint` instances
+    (the Python API accepts `sk.Inequality(...)` directly), or `{"constraints": [...]}`."""
     if isinstance(spec, (str, Path)):
         data = yaml.safe_load(Path(spec).read_text())
     else:
@@ -85,7 +88,10 @@ def parse_constraints(spec: str | Path | list[dict[str, Any]] | dict[str, Any]) 
     if isinstance(data, dict):
         data = data.get("constraints", [])
 
-    return [_constraint_from_dict(d) for d in data]
+    return [
+        item if isinstance(item, tuple(_CONSTRAINT_TYPES.values())) else _constraint_from_dict(item)
+        for item in data
+    ]
 
 
 def constraints_to_dicts(constraints: list[Constraint]) -> list[dict[str, Any]]:

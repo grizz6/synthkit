@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 
 from synthkit import serialization
+from synthkit.constraints import Constraint, constraints_to_dicts, parse_constraints
 from synthkit.copula import GaussianCopula, category_pseudo_uniform, rank_transform_to_uniform
 from synthkit.marginals import (
     BooleanMarginal,
@@ -25,6 +26,7 @@ from synthkit.marginals import (
     TextMarginal,
 )
 from synthkit.nulls import NullModel
+from synthkit.repair import apply_constraints
 from synthkit.types import ColumnType, infer_all_types
 
 ALL_NULL_KIND = "all_null"
@@ -103,12 +105,14 @@ class Profile:
     copula_columns: list[str]
     copula: dict[str, Any] | None
     n_rows_fit: int
+    constraints: list[dict[str, Any]]
 
     @classmethod
     def fit(
         cls,
         df: pd.DataFrame,
         column_types: dict[str, ColumnType] | None = None,
+        constraints: list[Constraint] | str | Path | None = None,
     ) -> "Profile":
         columns = list(df.columns)
         types = infer_all_types(df, overrides=column_types)
@@ -150,6 +154,8 @@ class Profile:
             else:
                 copula_columns = []
 
+        parsed_constraints = parse_constraints(constraints) if constraints else []
+
         return cls(
             columns=columns,
             column_types=stored_types,
@@ -159,9 +165,15 @@ class Profile:
             copula_columns=copula_columns,
             copula=copula_dict,
             n_rows_fit=len(df),
+            constraints=constraints_to_dicts(parsed_constraints),
         )
 
-    def emit(self, n: int, seed: int) -> pd.DataFrame:
+    def emit(
+        self,
+        n: int,
+        seed: int,
+        key_pools: dict[str, list[Any]] | None = None,
+    ) -> pd.DataFrame:
         rng = np.random.default_rng(seed)
         result: dict[str, np.ndarray] = {}
 
@@ -200,6 +212,10 @@ class Profile:
             for col in null_model_obj.columns:
                 frame.loc[mask[col].to_numpy(), col] = None
 
+        if self.constraints:
+            constraints = parse_constraints(self.constraints)
+            frame = apply_constraints(frame, constraints, rng, key_pools)
+
         return frame
 
     def to_dict(self) -> dict[str, Any]:
@@ -212,6 +228,7 @@ class Profile:
             "copula_columns": self.copula_columns,
             "copula": self.copula,
             "n_rows_fit": self.n_rows_fit,
+            "constraints": self.constraints,
         }
 
     @classmethod
