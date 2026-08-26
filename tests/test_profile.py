@@ -12,9 +12,7 @@ def make_correlated_df(n=3000, seed=0):
     # hours worked correlates with age via a shared latent factor
     hours = 0.5 * age + rng.normal(0, 8, n)
     status = rng.choice(["active", "cancelled", "pending"], size=n, p=[0.7, 0.2, 0.1])
-    cancelled_at = pd.to_datetime("2024-01-01") + pd.to_timedelta(
-        rng.integers(0, 300, n), unit="D"
-    )
+    cancelled_at = pd.to_datetime("2024-01-01") + pd.to_timedelta(rng.integers(0, 300, n), unit="D")
     cancelled_at = cancelled_at.where(pd.Series(status) == "cancelled")
     return pd.DataFrame(
         {
@@ -50,9 +48,7 @@ def test_correlation_structure_is_preserved():
     synthetic = profile.emit(n=5000, seed=0)
 
     real_corr = np.corrcoef(df["age"], df["hours"])[0, 1]
-    synth_corr = np.corrcoef(synthetic["age"].astype(float), synthetic["hours"].astype(float))[
-        0, 1
-    ]
+    synth_corr = np.corrcoef(synthetic["age"].astype(float), synthetic["hours"].astype(float))[0, 1]
     assert abs(real_corr - synth_corr) < 0.1
 
 

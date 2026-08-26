@@ -127,9 +127,7 @@ def test_conditional_null_applies_rule():
             "cancelled_at": ["2024-01-01", "2024-01-02", "2024-01-03"],
         }
     )
-    fixed = apply_constraints(
-        df, [ConditionalNull("cancelled_at", "status != 'cancelled'")]
-    )
+    fixed = apply_constraints(df, [ConditionalNull("cancelled_at", "status != 'cancelled'")])
     assert fixed["cancelled_at"].isna().tolist() == [True, False, True]
     assert fixed["cancelled_at"].iloc[1] == "2024-01-02"
 

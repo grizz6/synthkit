@@ -35,7 +35,7 @@ Run against the real [UCI Adult Census Income](https://archive.ics.uci.edu/ml/ma
 |---|---|---|
 | Real data | 0.037 | 0.230 |
 | Faker-style (independently shuffled) | 0.001 | 0.000 |
-| synthkit | 0.020 | 0.177 |
+| synthkit | 0.065 | 0.183 |
 
 A test whose correctness depends on that correlation — mean hours worked, high income vs low
 income — **passes on real data and on synthkit's output, and fails on Faker-style data.** That's

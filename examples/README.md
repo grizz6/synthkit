@@ -7,13 +7,17 @@ python examples/adult_census_worked_example.py
 Downloads the dataset on first run (cached under `examples/data/`, gitignored) and prints a
 comparison of real data, Faker-style independently-shuffled data, and synthkit's output.
 
-## Measured results (2026-08-25, 10,000 synthetic rows, seed 0)
+## Measured results (2026-08-26, 10,000 synthetic rows, seed 0)
 
 | | corr(age, education-num) | corr(hours, income) | Rows/sec |
 |---|---|---|---|
 | Real data | 0.037 | 0.230 | n/a |
 | Faker-style (shuffled) | 0.001 | 0.000 | fast |
-| synthkit | 0.020 | 0.177 | ~3,000,000 |
+| synthkit | 0.065 | 0.183 | ~3,000,000 |
+
+(Updated from an earlier run: `education-num` is a low-cardinality integer column, and the
+numeric-categorical ordering fix in CHANGELOG.md changed its measured correlation here too —
+not a regression, the same fix already verified on Wine Quality's `quality` column.)
 
 Joint-distribution test (mean `hours-per-week`, high income vs low income group):
 

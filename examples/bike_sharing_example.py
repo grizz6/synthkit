@@ -29,7 +29,9 @@ import synthkit as sk
 DATA_DIR = Path(__file__).parent / "data"
 ZIP_PATH = DATA_DIR / "bike-sharing.zip"
 CSV_PATH = DATA_DIR / "day.csv"
-DATA_URL = "https://archive.ics.uci.edu/ml/machine-learning-databases/00275/Bike-Sharing-Dataset.zip"
+DATA_URL = (
+    "https://archive.ics.uci.edu/ml/machine-learning-databases/00275/Bike-Sharing-Dataset.zip"
+)
 
 
 def load_bike_sharing() -> pd.DataFrame:

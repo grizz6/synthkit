@@ -23,7 +23,9 @@ import synthkit as sk
 
 DATA_DIR = Path(__file__).parent / "data"
 DATA_PATH = DATA_DIR / "winequality-red.csv"
-DATA_URL = "https://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-red.csv"
+DATA_URL = (
+    "https://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-red.csv"
+)
 
 
 def load_wine_quality() -> pd.DataFrame:
@@ -37,8 +39,10 @@ def main() -> None:
     df = load_wine_quality()
 
     profile = sk.fit(df)
-    print(f"{len(df)} rows, {len(df.columns)} columns, all copula-eligible: "
-          f"{len(profile.copula_columns) == len(df.columns)}")
+    print(
+        f"{len(df)} rows, {len(df.columns)} columns, all copula-eligible: "
+        f"{len(profile.copula_columns) == len(df.columns)}"
+    )
     print()
 
     synthetic = sk.emit(profile, n=len(df), seed=0)

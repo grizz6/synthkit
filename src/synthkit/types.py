@@ -87,6 +87,4 @@ def infer_all_types(
 ) -> dict[str, ColumnType]:
     """Infer types for every column, letting `overrides` win where given."""
     overrides = overrides or {}
-    return {
-        column: overrides.get(column, infer_column_type(df[column])) for column in df.columns
-    }
+    return {column: overrides.get(column, infer_column_type(df[column])) for column in df.columns}

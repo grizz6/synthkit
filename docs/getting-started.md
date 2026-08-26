@@ -56,9 +56,9 @@ profile = sk.fit(
 synthetic = sk.emit(profile, n=len(df), seed=0)
 report = sk.check(synthetic, profile, real=df)
 
-print(report.dcr_ratio)       # >= 1.0 means synthetic rows sit at least as far from
-                               # real training rows as a real holdout does
-print(report.exact_matches)   # should be 0
+print(report.dcr_ratio)  # >= 1.0 means synthetic rows sit at least as far from
+# real training rows as a real holdout does
+print(report.exact_matches)  # should be 0
 print(report.passed)
 ```
 

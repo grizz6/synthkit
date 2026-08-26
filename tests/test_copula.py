@@ -57,9 +57,7 @@ def test_copula_recovers_correlation_structure():
     assert abs(fitted_corr[0, 1] - 0.7) < 0.05
 
     sampled = copula.sample(n, np.random.default_rng(1))
-    sampled_z = np.column_stack(
-        [norm_ppf_safe(sampled["x"]), norm_ppf_safe(sampled["y"])]
-    )
+    sampled_z = np.column_stack([norm_ppf_safe(sampled["x"]), norm_ppf_safe(sampled["y"])])
     sampled_corr = np.corrcoef(sampled_z, rowvar=False)
     assert abs(sampled_corr[0, 1] - 0.7) < 0.07
 
