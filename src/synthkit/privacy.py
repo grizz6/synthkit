@@ -145,26 +145,33 @@ def distance_to_closest_record(
 ) -> np.ndarray:
     """For each row in `query`, its Gower distance to the nearest row in `reference`.
 
-    Only the per-row minimum survives past each batch, so peak memory is
-    O(batch_size * len(reference)) rather than O(len(query) * len(reference)) -- the full
-    matrix was measured to reach 2+ GB at a mere 10,000 query rows against an 8,000-row
-    reference set (three columns), which is well within what a single `check()` call on a
-    moderately sized real dataset looks like. Batching the query side is an exact
-    computation, not an approximation: every row's true nearest-reference distance is still
-    found, just without ever materializing the whole matrix in memory at once -- which
-    depends on normalizing every batch against the same value ranges (see
+    Both sides are batched, so peak memory is O(batch_size^2) rather than
+    O(len(query) * len(reference)) regardless of how large either the synthetic output or the
+    real dataset is -- the full matrix was measured to reach 2+ GB at a mere 10,000 query rows
+    against an 8,000-row reference set (three columns). Only the running per-row minimum
+    survives past each reference batch, so this is an exact computation, not an
+    approximation: every row's true nearest-reference distance is still found, just without
+    ever materializing the whole matrix (or even one whole row of it) in memory at once --
+    which depends on normalizing every batch against the same value ranges (see
     `compute_value_ranges`) rather than each batch computing its own from a smaller slice.
     """
-    if len(query) <= batch_size:
+    if len(query) <= batch_size and len(reference) <= batch_size:
         return gower_distance_matrix(query, reference, column_types).min(axis=1)
 
     value_ranges = compute_value_ranges(query, reference, column_types)
-    result = np.empty(len(query))
-    for start in range(0, len(query), batch_size):
-        batch = query.iloc[start : start + batch_size]
-        result[start : start + len(batch)] = gower_distance_matrix(
-            batch, reference, column_types, value_ranges
-        ).min(axis=1)
+    result = np.full(len(query), np.inf)
+
+    for q_start in range(0, len(query), batch_size):
+        q_batch = query.iloc[q_start : q_start + batch_size]
+        batch_min = np.full(len(q_batch), np.inf)
+
+        for r_start in range(0, len(reference), batch_size):
+            r_batch = reference.iloc[r_start : r_start + batch_size]
+            distances = gower_distance_matrix(q_batch, r_batch, column_types, value_ranges)
+            batch_min = np.minimum(batch_min, distances.min(axis=1))
+
+        result[q_start : q_start + len(q_batch)] = batch_min
+
     return result
 
 
