@@ -1,7 +1,6 @@
-"""The top-level Python API: `synthkit.fit`, `synthkit.emit`, `synthkit.check`.
+"""The top-level Python API: synthkit.fit, synthkit.emit, synthkit.check.
 
-Thin wrappers over `Profile` and `privacy.check` — this module exists so the documented usage
-(`import synthkit as sk; sk.fit(df); sk.emit(profile, n=...)`) doesn't require reaching into
+Thin wrappers over Profile and privacy.check, so normal usage doesn't require reaching into
 submodules for anything but constraint classes.
 """
 

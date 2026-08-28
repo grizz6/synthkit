@@ -31,20 +31,16 @@ class Inequality:
 
 @dataclass
 class Derived:
-    # `expr` is evaluated with pandas' `DataFrame.eval`, which parses it as a Python-like
-    # expression -- a column named `sub-total` in "sub-total + tax" parses as the subtraction
-    # `sub - total`, not a reference to that column (and raises UndefinedVariableError if
-    # there's no column literally named `sub`). Wrap a column name that isn't a valid Python
-    # identifier (contains a hyphen or space, starts with a digit, ...) in backticks:
-    # "`sub-total` + tax" -- this is pandas' own escape hatch, not synthkit-specific.
+    # expr is evaluated with pandas' DataFrame.eval. A column name that isn't a valid Python
+    # identifier (a hyphen, a space, a leading digit) needs backtick-quoting, e.g.
+    # "`sub-total` + tax", the same as pandas' own eval/query syntax.
     column: str
     expr: str
 
 
 @dataclass
 class ConditionalNull:
-    # `null_when` is evaluated the same way as `Derived.expr` -- see the note there about
-    # backtick-quoting a column name that isn't a valid Python identifier.
+    # null_when is evaluated the same way as Derived.expr; see the note there.
     column: str
     null_when: str
 

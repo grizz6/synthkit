@@ -1,8 +1,7 @@
-"""The `synthkit` command-line interface: fit, emit, check, diff.
+"""The synthkit command-line interface: fit, emit, check, diff.
 
-Kept as a thin layer over the library — every command here is a few lines of glue around
-`Profile`, `privacy.check`, or `drift.compute_drift`. Anything with actual logic belongs in
-those modules, not here, so it can be tested without going through subprocess-style CLI calls.
+Kept as a thin layer over the library: every command here is a few lines of glue around
+Profile, privacy.check, or drift.compute_drift. Actual logic belongs in those modules.
 """
 
 from __future__ import annotations
@@ -62,10 +61,8 @@ def fit(
     typer.echo(f"wrote profile for {len(df)} rows, {len(df.columns)} columns -> {output}")
 
     if holdout > 0:
-        # The profile is already saved by this point -- the self-check is a bonus, not the
-        # command's actual job, so a dataset too small to split into a holdout (or any other
-        # check() failure) should be reported as a warning, not an unhandled exception that
-        # makes a successful `fit` look like it crashed.
+        # The profile is already saved; a check() failure here (e.g. too few rows to split
+        # into a holdout) should be a warning, not a crash of an otherwise successful fit.
         try:
             synthetic = profile.emit(n=len(df), seed=0)
             report = privacy.check(synthetic, df, profile.column_types, holdout_fraction=holdout)

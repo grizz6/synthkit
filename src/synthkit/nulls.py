@@ -1,10 +1,8 @@
 """Joint null-pattern modeling.
 
-A per-column null rate is wrong whenever nulls are correlated across columns, which in
-practice is most of the time: `cancelled_at` is null exactly when `status != 'cancelled'`, a
-`shipped_at` is null until an order ships, and so on. Rather than sample each column's
-null-ness independently, this fits the joint distribution over which *combination* of columns
-is null in each row, then samples whole patterns.
+A per-column null rate is wrong whenever nulls are correlated across columns (cancelled_at is
+null exactly when status != 'cancelled', for example). This fits the joint distribution over
+which combination of columns is null in each row, then samples whole patterns.
 """
 
 from __future__ import annotations
