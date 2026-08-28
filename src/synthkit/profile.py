@@ -209,6 +209,12 @@ class Profile:
         seed: int,
         key_pools: dict[str, list[Any]] | None = None,
     ) -> pd.DataFrame:
+        if n < 0:
+            # Without this, a negative n surfaces many stack frames deep as numpy's own
+            # "negative dimensions are not allowed" from whichever sampling call happens to
+            # allocate an array first -- true, but not helpful at the call site that has n.
+            raise ValueError(f"n must be non-negative, got {n}")
+
         rng = np.random.default_rng(seed)
         result: dict[str, np.ndarray] = {}
 

@@ -48,6 +48,18 @@ for `customers` linked to a `Profile` for `orders`) is out of scope for `v0.1` �
 project's own scope notes on multi-table support being the only extension worth considering,
 and only after real users ask for it.
 
+## `Derived` and `ConditionalNull` expressions follow pandas' eval syntax, not yours
+
+Both are evaluated with `DataFrame.eval`, which parses `expr`/`null_when` as a Python-like
+expression rather than treating column names as opaque strings. A column named `sub-total`
+in `Derived("total", "sub-total + tax")` parses as the subtraction `sub - total` — not a
+reference to the `sub-total` column — and raises `UndefinedVariableError` if there's no
+column literally named `sub`. `Inequality` constraints are unaffected (they compare
+`df[left]`/`df[right]` directly, never through `eval`), but any column name that isn't a
+valid Python identifier (a hyphen, a space, a leading digit) needs pandas' own escape hatch
+when it appears inside a `Derived` or `ConditionalNull` expression: wrap it in backticks,
+e.g. `` "`sub-total` + tax" ``.
+
 ## Rare-combination leaks are scored pairwise, and small datasets still show plenty
 
 `privacy.check()` flags a synthetic row when *some pair* of categorical columns reproduces a
