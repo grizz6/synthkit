@@ -1,9 +1,5 @@
 """Benchmark: rows/sec, profile size, and peak memory, on a realistic column mix.
 
-Covers every metric docs/PLAN.md's "what to measure" section calls for under Performance
-(rows/sec, profile size in KB, memory ceiling) in one script, so there's one place to look
-these numbers up rather than reconstructing them later.
-
 Run with:
 
     python scripts/benchmark.py

@@ -1,14 +1,5 @@
-"""A fourth real-dataset check: Bike Sharing, chosen for two things the other three don't have.
-
-First, a genuine datetime column: Adult Census, Titanic, and Wine Quality are all
-datetime-free, so `DatetimeMarginal` and its path through the copula (`_pseudo_uniform`'s
-epoch-seconds rank transform in `profile.py`) had only ever been exercised by synthetic
-unit-test data before this.
-
-Second, an exact derived-column relationship on real data: `cnt` is always precisely `casual +
-registered`, every single row, not an approximate correlation. That makes it a genuine
-real-world case for the `Derived` constraint (see Part 2, Step 4 of docs/PLAN.md) rather than
-a synthetic example invented to demonstrate it.
+"""Bike Sharing example: a real datetime column, plus a real derived-column relationship
+(`cnt` is always `casual + registered`) used to demonstrate the `Derived` constraint.
 
 Run with:
 
