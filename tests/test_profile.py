@@ -174,6 +174,21 @@ def test_handles_small_dataset_below_copula_threshold():
     assert len(synthetic) == 10
 
 
+def test_emit_zero_rows_returns_empty_frame_with_correct_columns():
+    df = pd.DataFrame({"a": range(50), "b": ["x", "y"] * 25})
+    profile = Profile.fit(df)
+    synthetic = profile.emit(n=0, seed=0)
+    assert len(synthetic) == 0
+    assert list(synthetic.columns) == ["a", "b"]
+
+
+def test_emit_rejects_negative_n_with_a_clear_error():
+    df = pd.DataFrame({"a": range(50)})
+    profile = Profile.fit(df)
+    with pytest.raises(ValueError, match="non-negative"):
+        profile.emit(n=-5, seed=0)
+
+
 def test_fit_with_constraints_enforces_them_on_emit():
     rng = np.random.default_rng(0)
     n = 500
