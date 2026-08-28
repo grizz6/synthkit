@@ -86,6 +86,23 @@ notebooks (self-contained, real output cells), completing the "three example not
 from `docs/PLAN.md`'s Day 9. Building and actually executing them (rather than just writing
 them) is what surfaced the `dcr_ratio` bug above.
 
+### Performance
+
+- `privacy.check()`'s Gower distance computation materialized the full query × reference
+  matrix at once. Measured directly: 10,000 synthetic rows against an 8,000-row real holdout
+  (three columns) peaked at **2.2 GB** — `docs/LIMITATIONS.md` previously (and wrongly, since
+  it was never actually measured) claimed this was fine up to "tens of thousands of rows,"
+  which would have meant tens of gigabytes. `distance_to_closest_record` now batches the
+  query side (`batch_size`, default 500), cutting the same 10,000-row case to 111 MB — a 20x
+  reduction — with memory now scaling linearly with row count instead of quadratically.
+
+  Batching surfaced a second, more serious bug before it shipped: each batch's Gower distance
+  was normalizing against a range computed from just that batch's slice of data, not the full
+  dataset, so batched and unbatched results differed by a few percent — a real correctness
+  bug, not a rounding difference (caught by a test that compares the two directly). Fixed by
+  computing each column's normalization range once, over the full query + reference data,
+  and passing it into every batch (`compute_value_ranges`).
+
 ### Noted, not yet resolved
 
 - `synthkit` is already taken on PyPI (an unrelated package, currently at v0.6.2). This is
