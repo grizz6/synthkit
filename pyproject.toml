@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "synthkit"
-version = "0.0.1"
+dynamic = ["version"]
 description = "pytest fixtures that look like your production data, without your production data."
 readme = "README.md"
 license = "MIT"
@@ -35,6 +35,9 @@ dev = [
 
 [project.scripts]
 synthkit = "synthkit.cli:app"
+
+[tool.hatch.version]
+path = "src/synthkit/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/synthkit"]
