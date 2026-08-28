@@ -24,6 +24,7 @@ from synthkit.marginals import (
     IdentifierMarginal,
     NumericMarginal,
     TextMarginal,
+    to_epoch_seconds,
 )
 from synthkit.nulls import NullModel
 from synthkit.repair import apply_constraints
@@ -69,7 +70,7 @@ def _pseudo_uniform(ctype: ColumnType, values: pd.Series, marginal: Any) -> np.n
         return rank_transform_to_uniform(values.to_numpy(dtype=float))
 
     if ctype == ColumnType.DATETIME:
-        epoch = pd.to_datetime(values).to_numpy().astype("datetime64[s]").astype("int64")
+        epoch = to_epoch_seconds(values)
         return rank_transform_to_uniform(epoch.astype(float))
 
     if ctype == ColumnType.CATEGORICAL:

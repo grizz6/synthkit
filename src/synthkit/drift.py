@@ -21,6 +21,7 @@ from synthkit.marginals import (
     CategoricalMarginal,
     DatetimeMarginal,
     NumericMarginal,
+    to_epoch_seconds,
 )
 from synthkit.profile import ALL_NULL_KIND, Profile
 
@@ -40,11 +41,11 @@ def _numeric_drift(marginal_dict: dict[str, Any], current: pd.Series) -> float:
 def _datetime_drift(marginal_dict: dict[str, Any], current: pd.Series) -> float:
     marginal = DatetimeMarginal.from_dict(marginal_dict)
     reference = marginal.sample(np.linspace(0.0, 1.0, REFERENCE_SAMPLE_SIZE))
-    reference_epoch = reference.to_numpy().astype("datetime64[s]").astype(float)
+    reference_epoch = to_epoch_seconds(reference).astype(float)
     clean = current.dropna()
     if clean.empty:
         return 0.0
-    current_epoch = pd.to_datetime(clean).to_numpy().astype("datetime64[s]").astype(float)
+    current_epoch = to_epoch_seconds(clean).astype(float)
     return float(ks_2samp(current_epoch, reference_epoch).statistic)
 
 

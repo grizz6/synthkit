@@ -3,6 +3,18 @@
 Honest documentation of a known weakness is a credibility signal; discovering it during a
 demo is not. This page collects what synthkit does not do well.
 
+## Timezone-aware datetime columns lose their timezone
+
+A datetime column's timezone is converted to UTC and discarded at fit time; every emitted
+value comes back as a naive UTC timestamp, never in the original zone. For a fixed-UTC-offset
+timezone this is otherwise harmless — daily data recorded at local midnight is still detected
+and reproduced as daily, just at whatever UTC time that midnight falls at (e.g. 05:00 UTC for
+US/Eastern in winter). It stops being harmless across a DST transition: local midnight lands
+at a different UTC time on either side of the transition, so the granularity detection
+correctly (if disappointingly) falls back to hourly rather than daily for a range that spans
+one, because the data genuinely isn't daily-and-only-daily once expressed in UTC. If your
+fixtures need the original timezone preserved, this is a real gap, not a subtle one.
+
 ## The copula captures rank correlation, not arbitrary dependence
 
 The Gaussian copula reproduces the *rank* correlation structure between columns. It will not

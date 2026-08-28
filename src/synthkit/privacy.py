@@ -17,6 +17,8 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from synthkit.marginals import to_epoch_seconds
+
 NUMERIC_LIKE_TYPES = {"continuous", "discrete"}
 DEFAULT_RARE_COMBINATION_THRESHOLD = 5
 
@@ -45,8 +47,8 @@ def _column_distance(query: pd.Series, reference: pd.Series, column_type: str) -
         with np.errstate(invalid="ignore"):
             dist = np.abs(q[:, None] - r[None, :]) / value_range
     elif column_type == "datetime":
-        q = pd.to_datetime(query).to_numpy().astype("datetime64[s]").astype("float64")
-        r = pd.to_datetime(reference).to_numpy().astype("datetime64[s]").astype("float64")
+        q = to_epoch_seconds(query).astype("float64")
+        r = to_epoch_seconds(reference).astype("float64")
         value_range = _finite_range(np.concatenate([q, r]))
         with np.errstate(invalid="ignore"):
             dist = np.abs(q[:, None] - r[None, :]) / value_range
