@@ -1,10 +1,9 @@
-"""The Gaussian copula: the piece that ties per-column marginals together.
+"""The Gaussian copula: ties per-column marginals together via rank correlation.
 
-The idea is to separate *what each column looks like* (handled by `marginals.py`) from *how
-the columns move together*, model the latter with a single correlation matrix over normal
-scores, and recombine at sampling time. This is what makes the output preserve joint
-structure — `age` correlating with `income`, `hours` correlating with `education` — in a way
-that sampling each column independently never can.
+Separates what each column looks like (handled by marginals.py) from how the columns move
+together, models the latter with a single correlation matrix over normal scores, and
+recombines at sampling time. This is what makes the output preserve joint structure that
+sampling each column independently would throw away.
 """
 
 from __future__ import annotations

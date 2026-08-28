@@ -1,17 +1,14 @@
 """The repair engine: enforces declared constraints on already-sampled synthetic data.
 
-Each constraint type gets a different repair strategy, applied in a fixed order, because the
-right fix genuinely differs by constraint:
+Each constraint type gets a different repair strategy, applied in a fixed order:
 
 - Derived columns are recomputed, never sampled.
-- Inequalities are repaired by swapping the two values, which fixes the ordering while
-  preserving both columns' marginal distributions exactly (clamping would not).
+- Inequalities are repaired by swapping the two values, which preserves both columns'
+  marginal distributions exactly (clamping would not).
 - Conditional nulls are applied directly.
-- A single-column unique constraint (the common surrogate-key case) is generated fresh rather
-  than resampled and checked, since resampling a wide numeric range until it happens to be
-  unique is unreliable. A multi-column unique constraint only touches rows whose combination
-  actually collides, to avoid discarding realistic sampled values in every listed column.
-- Foreign keys are sampled from a caller-supplied key pool rather than resampled and checked.
+- A single-column unique constraint is generated fresh; a multi-column one only touches rows
+  whose combination actually collides, to avoid discarding realistic values elsewhere.
+- Foreign keys are sampled from a caller-supplied key pool.
 """
 
 from __future__ import annotations
@@ -42,8 +39,7 @@ def _nudge(series: pd.Series, step: int) -> pd.Series:
     if pd.api.types.is_float_dtype(series):
         target = np.inf if step > 0 else -np.inf
         return pd.Series(np.nextafter(series.to_numpy(dtype=float), target), index=series.index)
-    # No well-defined "smallest step" for this dtype (e.g. strings) — leave the tie as a
-    # documented limitation rather than guess at one.
+    # No well-defined "smallest step" for this dtype (e.g. strings); leave the tie as-is.
     return series
 
 
@@ -60,9 +56,8 @@ def _repair_inequality(df: pd.DataFrame, constraint: Inequality) -> pd.DataFrame
         df.loc[violated, [left, right]] = df.loc[violated, [right, left]].to_numpy()
 
     if strict:
-        # Swapping two equal values is a no-op, so a genuine tie (left == right) survives the
-        # swap above undisturbed; nudge the right-hand side apart by the smallest step the
-        # dtype supports rather than leave the strict constraint silently unsatisfied.
+        # Swapping two equal values is a no-op, so a genuine tie survives the swap above.
+        # Nudge the right-hand side apart by the smallest step the dtype supports.
         tied = df[left] == df[right]
         if tied.any():
             step = 1 if constraint.op == "<" else -1
@@ -84,17 +79,14 @@ def _repair_conditional_null(df: pd.DataFrame, constraint: ConditionalNull) -> p
 
 def _repair_unique(df: pd.DataFrame, columns: list[str], rng: np.random.Generator) -> pd.DataFrame:
     if len(columns) == 1:
-        # The common case (a surrogate key column): every value must be distinct, so generate
-        # fresh unique values outright rather than resample-and-check.
         column = columns[0]
         order = rng.permutation(len(df))
         df[column] = order + 1
         return df
 
-    # Only the combination of all `columns` together needs to be unique. Regenerating every
-    # listed column (as the single-column path does) would overwrite realistic sampled values
-    # in every one of them for every row; instead, disambiguate only rows whose combination
-    # actually collides with an earlier row, by suffixing the last column.
+    # Only the combination of all `columns` needs to be unique. Disambiguate only rows whose
+    # combination actually collides with an earlier row, by suffixing the last column, rather
+    # than overwriting every listed column for every row.
     combo_key = df[columns].astype(str).agg("|".join, axis=1)
     seen: dict[str, int] = {}
     occurrence = np.empty(len(df), dtype=int)
