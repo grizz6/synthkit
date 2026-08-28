@@ -115,19 +115,18 @@ strings), there's no well-defined "smallest step," so a tie is left unresolved r
 guessed at — a strict inequality constraint declared between two string columns may still
 contain equal values after repair.
 
-## `check()`'s memory scales with dataset size — measured, not assumed
+## `check()`'s compute time scales with dataset size — measured, not assumed
 
 `fit()` and `emit()` are fast and memory-light at real scale (50,000 rows, 6 columns: ~325ms
-to fit, 10.2 MB peak — see `scripts/benchmark.py`). `check()` is the one that costs something,
-because its Gower distance computation is a pairwise comparison across every query row and
-every reference row.
+to fit, 10.2 MB peak — see `scripts/benchmark.py`). `check()` costs more, because its Gower
+distance computation is a pairwise comparison across every query row and every reference row
+— O(n × m) work no matter what.
 
-The query side is batched (`distance_to_closest_record`'s `batch_size`, default 500) so peak
-memory no longer scales with the *synthetic* row count — before that existed, `check()` was
-measured hitting **2.2 GB at a mere 10,000 synthetic rows** against an 8,000-row real holdout
-(three columns), which would have made "tens of thousands of rows" (the earlier, wrong,
-unmeasured claim on this page) cost tens of gigabytes. With batching, the same comparison
-across several sizes:
+Both the query and reference sides are batched (`distance_to_closest_record`'s `batch_size`,
+default 500), so peak memory is `O(batch_size²)` regardless of how large either side is —
+before that existed, `check()` was measured hitting **2.2 GB at a mere 10,000 synthetic rows**
+against an 8,000-row real holdout (three columns). With batching, the same query-scaling
+comparison across several sizes:
 
 | Rows (synthetic ≈ real) | `check()` time | Peak memory |
 |---|---|---|
@@ -136,8 +135,18 @@ across several sizes:
 | 20,000 | 6.5 s | 222 MB |
 | 50,000 | 40 s | 556 MB |
 
-Memory now scales linearly with row count (not quadratically) because peak usage is
-`batch_size × len(reference)`, and `len(reference)` itself grows with the dataset. Reference
-side is *not* batched — a `check()` against a real dataset of a few hundred thousand rows will
-still take real memory and time, and a million-row `check()` needs a nearest-neighbor index
-(not implemented) to be practical, not just query-side batching.
+And holding the synthetic side fixed at 1,000 rows while growing only the real dataset:
+
+| Real rows | `check()` time | Peak memory |
+|---|---|---|
+| 10,000 | 0.6 s | 9 MB |
+| 50,000 | 8.9 s | 14 MB |
+| 100,000 | 33.8 s | 28 MB |
+
+Memory stays flat because it no longer depends on either side's total size, only on
+`batch_size`. **Time doesn't** — the O(n × m) comparison count is inherent to computing an
+*exact* nearest-neighbor distance this way, and batching doesn't reduce it. A `check()`
+against a real dataset in the hundreds of thousands of rows will still take real time (tens of
+seconds to minutes), and a million-row `check()` would need a nearest-neighbor index (a
+KD-tree or similar, not implemented) to get faster — not just batching, which only fixed the
+memory side of this.

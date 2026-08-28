@@ -65,10 +65,12 @@ def test_distance_to_closest_record_picks_nearest():
 
 
 def test_distance_to_closest_record_batching_matches_unbatched_result():
-    # Regression test: batching the query side to bound peak memory (measured to reach 2+ GB
-    # at 10,000 query rows against an 8,000-row reference set before this existed) must be an
-    # exact computation, not an approximation -- the per-row nearest-reference distance found
-    # in small batches has to be identical to computing the whole matrix at once.
+    # Regression test: batching both the query and reference sides to bound peak memory
+    # (measured to reach 2+ GB at 10,000 query rows against an 8,000-row reference set before
+    # this existed) must be an exact computation, not an approximation -- the per-row
+    # nearest-reference distance found in small batches has to be identical to computing the
+    # whole matrix at once. Both sides here (250, 300) exceed the batch_size (37), so this
+    # exercises the nested query/reference batching, not just one axis.
     rng = np.random.default_rng(0)
     query = pd.DataFrame({"a": rng.normal(0, 10, 250), "b": rng.choice(["x", "y", "z"], 250)})
     reference = pd.DataFrame(
@@ -78,6 +80,22 @@ def test_distance_to_closest_record_batching_matches_unbatched_result():
 
     unbatched = gower_distance_matrix(query, reference, column_types).min(axis=1)
     batched = distance_to_closest_record(query, reference, column_types, batch_size=37)
+
+    assert np.allclose(unbatched, batched)
+
+
+def test_distance_to_closest_record_handles_large_reference_with_small_query():
+    # The reference side (typically the real dataset) can be much larger than the query side
+    # (typically the synthetic output) -- confirmed directly that before two-sided batching,
+    # only a large *query* was bounded; a large reference against a small query still
+    # materialized the whole matrix. Peak memory should now stay small regardless.
+    rng = np.random.default_rng(0)
+    query = pd.DataFrame({"a": rng.normal(0, 10, 20)})
+    reference = pd.DataFrame({"a": rng.normal(0, 10, 5000)})
+    column_types = {"a": "continuous"}
+
+    unbatched = gower_distance_matrix(query, reference, column_types).min(axis=1)
+    batched = distance_to_closest_record(query, reference, column_types, batch_size=64)
 
     assert np.allclose(unbatched, batched)
 
