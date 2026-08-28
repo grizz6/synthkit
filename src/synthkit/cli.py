@@ -11,7 +11,7 @@ from pathlib import Path
 
 import typer
 
-from synthkit import privacy
+from synthkit import __version__, privacy
 from synthkit.constraints import parse_constraints
 from synthkit.drift import DEFAULT_DRIFT_THRESHOLD, compute_drift
 from synthkit.io import read_table, write_table
@@ -19,6 +19,25 @@ from synthkit.privacy import DEFAULT_RARE_COMBINATION_THRESHOLD
 from synthkit.profile import Profile
 
 app = typer.Typer(add_completion=False, help="Synthetic test fixtures from a real dataset's shape.")
+
+
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"synthkit {__version__}")
+        raise typer.Exit()
+
+
+@app.callback()
+def main(
+    version: bool | None = typer.Option(
+        None,
+        "--version",
+        callback=_version_callback,
+        is_eager=True,
+        help="Show the synthkit version and exit.",
+    ),
+) -> None:
+    pass
 
 
 @app.command()
