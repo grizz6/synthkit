@@ -129,3 +129,29 @@ def test_check_scores_rare_combinations_pairwise_not_jointly():
 
     report = check(df, df, column_types, min_dcr_ratio=0.0)
     assert report.rare_combination_leaks == 0
+
+
+def test_dcr_ratio_is_neutral_when_holdout_baseline_is_degenerately_zero():
+    # Regression test: with too few columns / too little entropy relative to the row count,
+    # real holdout rows naturally land exactly on some training row (duplicates happen), so
+    # the holdout's own 5th-percentile DCR is 0 -- not because of anything synthetic did, just
+    # because the dataset doesn't have enough columns to make rows distinct. Confirmed
+    # directly on a 5-column slice of Adult Census (32,561 rows): both holdout_p and
+    # synthetic_p were exactly 0, and dividing by a fallback epsilon reported dcr_ratio=0.0,
+    # which reads as a hard privacy failure it isn't.
+    rng = np.random.default_rng(0)
+    n = 5000
+    # Two binary columns and nothing else: with 5000 rows and only 4 possible combinations,
+    # both real and synthetic data are guaranteed to be full of exact duplicates.
+    df = pd.DataFrame(
+        {
+            "a": rng.choice([0, 1], size=n),
+            "b": rng.choice([0, 1], size=n),
+        }
+    )
+    column_types = {"a": "categorical", "b": "categorical"}
+
+    # Using df as its own "synthetic" isolates the degenerate-baseline case: if the fix works,
+    # a dataset this duplicate-heavy reports the neutral ratio rather than 0.0.
+    report = check(df, df, column_types, min_dcr_ratio=0.5)
+    assert report.dcr_ratio == 1.0

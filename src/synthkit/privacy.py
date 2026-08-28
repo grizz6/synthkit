@@ -161,8 +161,19 @@ def check(
     holdout_dcr = distance_to_closest_record(holdout, training, column_types)
 
     synthetic_p = np.percentile(synthetic_dcr, dcr_percentile)
-    holdout_p = np.percentile(holdout_dcr, dcr_percentile) or 1e-9
-    ratio = float(synthetic_p / holdout_p)
+    holdout_p = np.percentile(holdout_dcr, dcr_percentile)
+
+    if holdout_p == 0 and synthetic_p == 0:
+        # Both the real holdout and the synthetic rows sit exactly on some training row at
+        # this percentile. That's not evidence synthkit is memorizing -- it means the dataset
+        # doesn't have enough entropy across its columns for even real, never-trained-on rows
+        # to come out distinct (common with a handful of low-cardinality columns over many
+        # rows: exact duplicate rows occur naturally). Dividing 0 by a fallback epsilon would
+        # report a ratio of 0.0, which reads as a hard privacy failure it isn't -- the neutral
+        # "exactly as duplicated as real data already is" case is a ratio of 1.0.
+        ratio = 1.0
+    else:
+        ratio = float(synthetic_p / (holdout_p or 1e-9))
 
     exact_matches = count_exact_matches(synthetic, real)
 

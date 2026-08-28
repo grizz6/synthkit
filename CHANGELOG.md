@@ -72,5 +72,18 @@ Initial implementation of the core pipeline described in [docs/PLAN.md](docs/PLA
   Confirmed on the Bike Sharing dataset's `dteday` column. Both sides now normalize through
   `datetime64[s]` first, matching the pattern already used correctly elsewhere in the
   codebase (`profile.py`, `drift.py`, `privacy.py`).
+- `privacy.check()`'s `dcr_ratio` divided by a fallback epsilon whenever the holdout
+  baseline's 5th-percentile DCR was exactly 0 — which happens naturally on a dataset without
+  enough entropy across its columns for even real, never-trained-on holdout rows to come out
+  distinct (a handful of low-cardinality columns over many rows, e.g. a 5-column slice of
+  Adult Census: exact duplicate rows occur in real data too). When synthetic data hit the
+  same natural floor, the reported ratio was `0.0`, reading as a hard privacy failure it
+  wasn't. Now reports the neutral `1.0` ("exactly as duplicated as real data already is")
+  when both sides are degenerately zero.
+
+Also added `examples/notebooks/` — the same four worked examples as executed Jupyter
+notebooks (self-contained, real output cells), completing the "three example notebooks" item
+from `docs/PLAN.md`'s Day 9. Building and actually executing them (rather than just writing
+them) is what surfaced the `dcr_ratio` bug above.
 
 Not yet published to PyPI. No version has been tagged.

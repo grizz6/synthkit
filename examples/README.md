@@ -1,3 +1,6 @@
+Also available as executed Jupyter notebooks in [notebooks/](notebooks/) — same four
+examples, self-contained, with real output cells already run.
+
 # Worked example: UCI Adult Census Income
 
 ```bash
