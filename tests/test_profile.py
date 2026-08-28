@@ -57,7 +57,7 @@ def test_correlation_structure_is_preserved():
 def test_correlation_with_low_cardinality_numeric_column_is_preserved():
     # Regression test: a low-cardinality numeric column (classified categorical by types.py)
     # used to be ordered by descending frequency for the copula, which scrambles its natural
-    # numeric order whenever the value counts don't happen to already be monotonic -- silently
+    # numeric order whenever the value counts don't happen to already be monotonic, silently
     # destroying its correlation with everything else. A "rating" correlated with "amount",
     # with counts peaking in the middle (order [3,4,2,5,1], not [1,2,3,4,5]), exercises exactly
     # that case.
@@ -218,7 +218,7 @@ def test_duplicate_column_names_raise_a_clear_error():
 def test_integer_column_names_survive_save_load_round_trip(tmp_path):
     # Regression test: JSON object keys are always strings, so a profile fit on a dataframe
     # with integer column names used to save/reload with column_types keyed by "0"/"1"/...
-    # while `columns` stayed [0, 1, ...] -- emit() then KeyError'd looking up an int in a
+    # while `columns` stayed [0, 1, ...], emit() then KeyError'd looking up an int in a
     # str-keyed dict. Confirmed directly before this fix.
     df = pd.DataFrame(np.random.default_rng(0).random((50, 3)), columns=[0, 1, 2])
     profile = Profile.fit(df)

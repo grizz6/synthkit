@@ -1,9 +1,5 @@
-"""A second real-dataset check: Titanic, chosen for what Adult Census doesn't exercise.
-
-Adult Census (see adult_census_worked_example.py) has no nulls and a handful of well-behaved
-columns. Titanic adds: null co-occurrence (Cabin is null ~77% of the time, correlated with
-passenger class), a free-text-ish Name column with no repeats, a messy Ticket identifier
-column, and a small dataset (891 rows) relative to Adult Census's 32,561.
+"""Titanic example: null co-occurrence (Cabin is null ~77% of the time), a free-text-ish Name
+column with no repeats, a messy Ticket identifier column, and a small (891-row) dataset.
 
 Run with:
 

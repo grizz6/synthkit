@@ -86,7 +86,7 @@ def test_timezone_aware_datetime_fits_without_warning():
 
 def test_timezone_aware_datetime_with_fixed_offset_detects_daily_granularity():
     # Regression test: a fixed-UTC-offset timezone (no DST transition in range) still records
-    # genuinely daily data -- every value is "local midnight," just not at a UTC-epoch daily
+    # genuinely daily data, every value is "local midnight," just not at a UTC-epoch daily
     # boundary. The naive `epoch_seconds % 86400 == 0` check used to call this hourly (the
     # constant ~5-hour offset from UTC midnight isn't itself a multiple of 86400), even though
     # nothing about the underlying data is actually hourly.
