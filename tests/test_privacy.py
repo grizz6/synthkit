@@ -64,6 +64,35 @@ def test_distance_to_closest_record_picks_nearest():
     assert dcr[0] < 0.01
 
 
+def test_distance_to_closest_record_batching_matches_unbatched_result():
+    # Regression test: batching the query side to bound peak memory (measured to reach 2+ GB
+    # at 10,000 query rows against an 8,000-row reference set before this existed) must be an
+    # exact computation, not an approximation -- the per-row nearest-reference distance found
+    # in small batches has to be identical to computing the whole matrix at once.
+    rng = np.random.default_rng(0)
+    query = pd.DataFrame({"a": rng.normal(0, 10, 250), "b": rng.choice(["x", "y", "z"], 250)})
+    reference = pd.DataFrame(
+        {"a": rng.normal(0, 10, 300), "b": rng.choice(["x", "y", "z"], 300)}
+    )
+    column_types = {"a": "continuous", "b": "categorical"}
+
+    unbatched = gower_distance_matrix(query, reference, column_types).min(axis=1)
+    batched = distance_to_closest_record(query, reference, column_types, batch_size=37)
+
+    assert np.allclose(unbatched, batched)
+
+
+def test_distance_to_closest_record_batch_size_smaller_than_query_is_used():
+    # Sanity check that the batching branch actually runs (not just the batch_size >= len(query)
+    # fast path) by using a query larger than a tiny batch size.
+    rng = np.random.default_rng(0)
+    query = pd.DataFrame({"a": rng.normal(0, 1, 100)})
+    reference = pd.DataFrame({"a": rng.normal(0, 1, 100)})
+    result = distance_to_closest_record(query, reference, {"a": "continuous"}, batch_size=10)
+    assert result.shape == (100,)
+    assert np.isfinite(result).all()
+
+
 def test_count_exact_matches_detects_duplicated_rows():
     real = pd.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"]})
     synthetic = pd.DataFrame({"a": [2, 9], "b": ["y", "q"]})

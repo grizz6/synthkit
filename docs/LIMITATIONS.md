@@ -115,9 +115,29 @@ strings), there's no well-defined "smallest step," so a tie is left unresolved r
 guessed at — a strict inequality constraint declared between two string columns may still
 contain equal values after repair.
 
-## Performance is not benchmarked past hundreds of thousands of rows
+## `check()`'s memory scales with dataset size — measured, not assumed
 
-The privacy check's Gower distance computation is a full pairwise comparison — O(n × m) in the
-number of rows on each side — which is fine for the fixture-sized data (thousands to tens of
-thousands of rows) this package targets, but will not scale to a million-row `check` without a
-nearest-neighbor index, which is not implemented.
+`fit()` and `emit()` are fast and memory-light at real scale (50,000 rows, 6 columns: ~325ms
+to fit, 10.2 MB peak — see `scripts/benchmark.py`). `check()` is the one that costs something,
+because its Gower distance computation is a pairwise comparison across every query row and
+every reference row.
+
+The query side is batched (`distance_to_closest_record`'s `batch_size`, default 500) so peak
+memory no longer scales with the *synthetic* row count — before that existed, `check()` was
+measured hitting **2.2 GB at a mere 10,000 synthetic rows** against an 8,000-row real holdout
+(three columns), which would have made "tens of thousands of rows" (the earlier, wrong,
+unmeasured claim on this page) cost tens of gigabytes. With batching, the same comparison
+across several sizes:
+
+| Rows (synthetic ≈ real) | `check()` time | Peak memory |
+|---|---|---|
+| 5,000 | 0.5 s | 56 MB |
+| 10,000 | 1.7 s | 111 MB |
+| 20,000 | 6.5 s | 222 MB |
+| 50,000 | 40 s | 556 MB |
+
+Memory now scales linearly with row count (not quadratically) because peak usage is
+`batch_size × len(reference)`, and `len(reference)` itself grows with the dataset. Reference
+side is *not* batched — a `check()` against a real dataset of a few hundred thousand rows will
+still take real memory and time, and a million-row `check()` needs a nearest-neighbor index
+(not implemented) to be practical, not just query-side batching.
