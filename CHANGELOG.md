@@ -86,4 +86,12 @@ notebooks (self-contained, real output cells), completing the "three example not
 from `docs/PLAN.md`'s Day 9. Building and actually executing them (rather than just writing
 them) is what surfaced the `dcr_ratio` bug above.
 
+### Noted, not yet resolved
+
+- `synthkit` is already taken on PyPI (an unrelated package, currently at v0.6.2). This is
+  exactly the check `docs/PLAN.md`'s own Day -1 calls for before writing any code, done late.
+  `pytest-synthkit` and the plan's other candidate names (`shapeshift`, `replikit`,
+  `mimicdata`) are all still available. Decision: keep the name for now and revisit before an
+  actual PyPI publish, rather than rename mid-development.
+
 Not yet published to PyPI. No version has been tagged.

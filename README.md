@@ -54,6 +54,14 @@ pip install -e .
 pip install -e ./pytest-synthkit  # optional pytest fixture plugin
 ```
 
+**Naming note:** `synthkit` is already taken on PyPI by an unrelated package. `pytest-synthkit`
+is still available. This doesn't block local development or GitHub distribution — it only
+matters if/when this project actually publishes to PyPI, at which point either this project
+publishes under a different distribution name (imports and the CLI command could stay
+`synthkit`/`synthkit`, only the PyPI listing name would need to change) or the project itself
+gets renamed. Undecided for now; see [docs/PLAN.md](docs/PLAN.md)'s own Day -1 note that this
+check should have happened before any code was written.
+
 ## Usage
 
 ```python
