@@ -64,12 +64,8 @@ def infer_column_type(series: pd.Series) -> ColumnType:
     # Everything else is treated as string-like.
     nunique = non_null.nunique()
 
-    # No row-count floor here: a column where every value is unique is an identifier
-    # regardless of how few rows were fit on, because a CATEGORICAL classification stores
-    # every distinct value verbatim as a "category" — for an all-unique column that means
-    # memorizing 100% of the real values. Below ~10 rows there isn't enough data to tell
-    # "identifier" apart from "small categorical that happened to have no repeats" anyway, so
-    # the safe default is the one that never stores real values.
+    # A column where every value is unique is an identifier: classifying it as CATEGORICAL
+    # would store every distinct value verbatim as a "category".
     if nunique == n:
         return ColumnType.IDENTIFIER
 

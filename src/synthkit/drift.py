@@ -55,10 +55,8 @@ def _categorical_drift(marginal_dict: dict[str, Any], current: pd.Series) -> flo
     raw_current_probs = current.dropna().astype(str).value_counts(normalize=True).to_dict()
 
     if OTHER_CATEGORY in reference_probs:
-        # The profile pooled rare categories into __other__ at fit time; fold any current
-        # category the profile doesn't recognize into the same bucket before comparing, so a
-        # rare category isn't counted twice — once as its own missing key, once as the
-        # unmatched slice of __other__'s pooled mass.
+        # Fold any category the profile doesn't recognize into __other__ too, so it isn't
+        # counted twice: once as its own missing key, once as unmatched __other__ mass.
         current_probs: dict[str, float] = {}
         for category, prob in raw_current_probs.items():
             key = category if category in reference_probs else OTHER_CATEGORY
