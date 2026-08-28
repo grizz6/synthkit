@@ -110,5 +110,9 @@ them) is what surfaced the `dcr_ratio` bug above.
   `pytest-synthkit` and the plan's other candidate names (`shapeshift`, `replikit`,
   `mimicdata`) are all still available. Decision: keep the name for now and revisit before an
   actual PyPI publish, rather than rename mid-development.
+- Added `.github/workflows/docs.yml` to build and deploy the MkDocs site to GitHub Pages —
+  wired up but not fired, same as `release.yml`: it only actually publishes once GitHub Pages
+  is turned on for this repo (Settings → Pages → Source: "GitHub Actions"), which is a repo
+  setting change left for a deliberate decision rather than flipped automatically.
 
 Not yet published to PyPI. No version has been tagged.
