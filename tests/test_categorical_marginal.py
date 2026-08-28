@@ -15,8 +15,8 @@ def test_categories_ordered_by_descending_frequency():
 def test_numeric_categories_ordered_by_value_not_frequency():
     # Regression test: a low-cardinality numeric column (a rating, a small count) still has a
     # natural order that the copula's rank correlation with other numeric columns depends on.
-    # Ordering by descending frequency instead -- correct for a genuinely nominal categorical
-    # like a color -- silently scrambled that order: a wine-quality-style rating peaking at
+    # Ordering by descending frequency instead, correct for a genuinely nominal categorical
+    # like a color, silently scrambled that order: a wine-quality-style rating peaking at
     # 5 and 6 used to order as [5, 6, 7, 4, 8, 3] instead of [3, 4, 5, 6, 7, 8].
     values = pd.Series([5] * 68 + [6] * 64 + [7] * 20 + [4] * 5 + [8] * 2 + [3] * 1)
     marginal = CategoricalMarginal.fit(values)
@@ -78,7 +78,7 @@ def test_numeric_column_with_other_bucket_still_casts_non_other_rows():
     # Regression test: when tail-bucketing produced an __other__ category (only reachable via
     # an explicit column_types override forcing a high-cardinality numeric column into
     # CATEGORICAL), the dtype cast used to be skipped for the *entire* array, leaving every
-    # row -- not just the __other__ ones -- as a stringified numeral instead of a real int.
+    # row, not just the __other__ ones, as a stringified numeral instead of a real int.
     values = pd.Series(range(200))  # 200 distinct ints, forces tail-bucketing at max_categories
     marginal = CategoricalMarginal.fit(values, max_categories=10)
     assert marginal.value_dtype == "int"

@@ -33,7 +33,7 @@ def test_ks_by_column_datetime_fidelity_is_not_spuriously_maximal():
     # typically datetime64[us] or [ns], while DatetimeMarginal.sample always emits
     # datetime64[s]. _fidelity_by_column used to cast each side to int64 directly without
     # normalizing the unit first, so real epoch values (microseconds) and synthetic epoch
-    # values (seconds) differed by a factor of a million -- ks_2samp then reported the two
+    # values (seconds) differed by a factor of a million, ks_2samp then reported the two
     # distributions as completely disjoint (statistic == 1.0) regardless of actual fidelity.
     rng = np.random.default_rng(0)
     n = 500

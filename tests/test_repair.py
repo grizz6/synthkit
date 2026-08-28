@@ -121,8 +121,8 @@ def test_derived_column_is_recomputed():
 
 
 def test_derived_expression_needs_backticks_for_non_identifier_column_names():
-    # A hyphen in a bare column name parses as subtraction to df.eval, not a column reference
-    # -- pandas' own escape hatch (backtick-quoting) is the documented way around it.
+    # A hyphen in a bare column name parses as subtraction to df.eval, not a column reference.
+    # pandas' own escape hatch (backtick-quoting) is the documented way around it.
     df = pd.DataFrame({"sub-total": [10.0, 20.0], "tax": [1.0, 2.0], "total": [0.0, 0.0]})
     fixed = apply_constraints(df, [Derived("total", "`sub-total` + tax")])
     assert fixed["total"].tolist() == [11.0, 22.0]

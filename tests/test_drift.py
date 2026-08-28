@@ -59,9 +59,8 @@ def test_max_drift_property_reports_the_worst_column():
 def test_other_bucket_does_not_inflate_drift_for_unchanged_tail():
     # Regression test: when the profile's categorical marginal pooled rare categories into
     # __other__, comparing raw current-category frequencies against reference_probs double
-    # counted every individual rare category (once as its own missing key, once again as the
-    # unmatched slice of __other__'s mass) even when the tail distribution hadn't drifted at
-    # all — this could spuriously trip the drift threshold on an unchanged column.
+    # counted every individual rare category, once as its own missing key and once as the
+    # unmatched slice of __other__'s mass, even when the tail hadn't drifted at all.
     rng = np.random.default_rng(0)
     n = 5000
     # 60 distinct rare categories (>50, so CategoricalMarginal tail-buckets some into __other__)
@@ -149,7 +148,7 @@ def test_detects_boolean_drift():
 
 def test_identifier_and_text_columns_are_skipped_for_drift():
     # user_id is all-unique (identifier); notes has 35 distinct free-text values across 60
-    # rows -- high cardinality but with repeats, landing it in TEXT rather than IDENTIFIER.
+    # rows, high cardinality but with repeats, landing it in TEXT rather than IDENTIFIER.
     notes_values = [f"note number {i} with some words" for i in range(35)]
     df = pd.DataFrame(
         {
