@@ -74,9 +74,7 @@ def test_distance_to_closest_record_batching_matches_unbatched_result():
     # exercises the nested query/reference batching, not just one axis.
     rng = np.random.default_rng(0)
     query = pd.DataFrame({"a": rng.normal(0, 10, 250), "b": rng.choice(["x", "y", "z"], 250)})
-    reference = pd.DataFrame(
-        {"a": rng.normal(0, 10, 300), "b": rng.choice(["x", "y", "z"], 300)}
-    )
+    reference = pd.DataFrame({"a": rng.normal(0, 10, 300), "b": rng.choice(["x", "y", "z"], 300)})
     column_types = {"a": "continuous", "b": "categorical"}
 
     unbatched = gower_distance_matrix(query, reference, column_types).min(axis=1)
