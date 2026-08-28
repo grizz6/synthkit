@@ -50,6 +50,24 @@ def test_fit_with_holdout_prints_self_check(tmp_path):
     assert "self-check" in result.output
 
 
+def test_fit_with_holdout_on_tiny_dataset_warns_but_still_exits_zero(tmp_path):
+    # Regression test: a real dataset too small to split into a holdout used to make the
+    # self-check raise an unhandled ValueError, which crashed the whole `fit` command with a
+    # traceback and a nonzero exit code -- even though the profile had already been written
+    # successfully by that point. The self-check failing should be a warning, not a crash.
+    data_path = tmp_path / "tiny.csv"
+    pd.DataFrame({"a": [5.0]}).to_csv(data_path, index=False)
+    profile_path = tmp_path / "profile.json"
+
+    result = runner.invoke(
+        app, ["fit", str(data_path), "-o", str(profile_path), "--holdout", "0.2"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert profile_path.exists()
+    assert "self-check skipped" in result.output
+
+
 def test_emit_writes_synthetic_table(tmp_path):
     data_path = tmp_path / "data.csv"
     make_df().to_csv(data_path, index=False)

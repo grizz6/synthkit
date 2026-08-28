@@ -122,5 +122,9 @@ them) is what surfaced the `dcr_ratio` bug above.
   `n_holdout` so a training split of at least 1 row is always possible when the real dataset
   itself has 2 or more rows.
 - Added `--version` to the CLI and a `SECURITY.md` vulnerability-reporting policy.
+- `synthkit fit --holdout` on a real dataset too small to split raised the ValueError above
+  as an unhandled exception, crashing the whole `fit` command with a traceback and a nonzero
+  exit code — even though the profile had already been written successfully by that point.
+  The self-check failing is now a warning ("self-check skipped: ...") rather than a crash.
 
 Not yet published to PyPI. No version has been tagged.

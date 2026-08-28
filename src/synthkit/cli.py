@@ -62,11 +62,18 @@ def fit(
     typer.echo(f"wrote profile for {len(df)} rows, {len(df.columns)} columns -> {output}")
 
     if holdout > 0:
-        synthetic = profile.emit(n=len(df), seed=0)
-        report = privacy.check(synthetic, df, profile.column_types, holdout_fraction=holdout)
-        typer.echo(
-            f"self-check: dcr_ratio={report.dcr_ratio:.3f} exact_matches={report.exact_matches}"
-        )
+        # The profile is already saved by this point -- the self-check is a bonus, not the
+        # command's actual job, so a dataset too small to split into a holdout (or any other
+        # check() failure) should be reported as a warning, not an unhandled exception that
+        # makes a successful `fit` look like it crashed.
+        try:
+            synthetic = profile.emit(n=len(df), seed=0)
+            report = privacy.check(synthetic, df, profile.column_types, holdout_fraction=holdout)
+            typer.echo(
+                f"self-check: dcr_ratio={report.dcr_ratio:.3f} exact_matches={report.exact_matches}"
+            )
+        except ValueError as e:
+            typer.echo(f"self-check skipped: {e}", err=True)
 
 
 @app.command()
