@@ -46,3 +46,33 @@ def test_numeric_marginal_ignores_nulls_when_fitting():
     marginal = NumericMarginal.fit(values)
     assert marginal.quantile_values[0] >= 1.0
     assert marginal.quantile_values[-1] <= 5.0
+
+
+def test_numeric_marginal_handles_positive_infinity_without_nan():
+    # Regression test: np.quantile's linear interpolation hits `0 * inf = nan` for any knot
+    # landing exactly on a sample index adjacent to +inf, and np.maximum.accumulate then
+    # propagates that NaN through every subsequent (higher) knot. sample() would silently
+    # emit NaN for a real fraction of rows instead of a number -- confirmed directly: with
+    # one +inf mixed into 500 real-valued rows, ~1% of a 1000-row emit() came back NaN before
+    # this fix, with a bare RuntimeWarning as the only clue anything was wrong.
+    values = pd.Series([1.0, 2.0, np.inf, 4.0, 5.0] * 20)
+    marginal = NumericMarginal.fit(values)
+    assert not any(np.isnan(v) for v in marginal.quantile_values)
+    sampled = marginal.sample(np.linspace(0, 1, 1000))
+    assert not np.isnan(sampled).any()
+
+
+def test_numeric_marginal_handles_negative_infinity_without_nan():
+    values = pd.Series([-np.inf, 2.0, 3.0, 4.0, 5.0] * 20)
+    marginal = NumericMarginal.fit(values)
+    assert not any(np.isnan(v) for v in marginal.quantile_values)
+    sampled = marginal.sample(np.linspace(0, 1, 1000))
+    assert not np.isnan(sampled).any()
+
+
+def test_numeric_marginal_handles_infinity_on_both_ends_without_nan():
+    values = pd.Series([-np.inf, 2.0, 3.0, 4.0, np.inf] * 20)
+    marginal = NumericMarginal.fit(values)
+    assert not any(np.isnan(v) for v in marginal.quantile_values)
+    sampled = marginal.sample(np.linspace(0, 1, 1000))
+    assert not np.isnan(sampled).any()

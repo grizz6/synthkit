@@ -33,7 +33,20 @@ class NumericMarginal:
             raise ValueError("cannot fit a numeric marginal on an all-null column")
 
         levels = np.linspace(0.0, 1.0, n_knots)
-        knots = np.quantile(clean, levels)
+        with np.errstate(invalid="ignore"):
+            knots = np.quantile(clean, levels)
+        # A genuine +-inf value in the data (a division result, a sentinel) makes numpy's
+        # quantile interpolation hit `0 * inf = nan` for any knot that lands exactly on a
+        # sample index next to it -- even though the mathematically sensible answer is just
+        # that neighboring value. Left alone, every quantile knot at or above the first NaN
+        # becomes NaN too (np.maximum.accumulate propagates NaN once it appears), and
+        # `sample()` would silently emit NaN for a chunk of rows instead of a number. Forward-
+        # then-backward-filling from the nearest valid neighbor is the same fix pandas itself
+        # uses for exactly this class of gap, and every neighbor is at most 1/n_knots away in
+        # quantile space, so the correction is small everywhere except the tail(s) actually
+        # touching +-inf.
+        if np.isnan(knots).any():
+            knots = pd.Series(knots).ffill().bfill().to_numpy()
         # Quantiles of a sample with ties can produce a non-monotonic-looking but technically
         # non-decreasing sequence; enforce non-decreasing explicitly so interpolation is sane.
         knots = np.maximum.accumulate(knots)

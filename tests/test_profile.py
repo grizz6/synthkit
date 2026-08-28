@@ -1,9 +1,11 @@
 import numpy as np
 import pandas as pd
+import pytest
 from scipy.stats import ks_2samp
 
 from synthkit.constraints import Inequality
 from synthkit.profile import Profile
+from synthkit.types import ColumnType
 
 
 def make_correlated_df(n=3000, seed=0):
@@ -190,3 +192,31 @@ def test_profile_without_constraints_has_empty_constraint_list():
     df = pd.DataFrame({"a": [1.0, 2.0, 3.0] * 10})
     profile = Profile.fit(df)
     assert profile.constraints == []
+
+
+def test_duplicate_column_names_raise_a_clear_error():
+    df = pd.DataFrame(np.random.default_rng(0).random((20, 2)), columns=["a", "a"])
+    with pytest.raises(ValueError, match="duplicate column name"):
+        Profile.fit(df)
+
+
+def test_integer_column_names_survive_save_load_round_trip(tmp_path):
+    # Regression test: JSON object keys are always strings, so a profile fit on a dataframe
+    # with integer column names used to save/reload with column_types keyed by "0"/"1"/...
+    # while `columns` stayed [0, 1, ...] -- emit() then KeyError'd looking up an int in a
+    # str-keyed dict. Confirmed directly before this fix.
+    df = pd.DataFrame(np.random.default_rng(0).random((50, 3)), columns=[0, 1, 2])
+    profile = Profile.fit(df)
+    path = tmp_path / "profile.json"
+    profile.save(path)
+
+    reloaded = Profile.load(path)
+    assert reloaded.columns == ["0", "1", "2"]
+    synthetic = reloaded.emit(n=10, seed=0)
+    assert list(synthetic.columns) == ["0", "1", "2"]
+
+
+def test_column_types_override_matches_by_original_non_string_key():
+    df = pd.DataFrame({0: range(30), 1: ["a", "b"] * 15})
+    profile = Profile.fit(df, column_types={0: ColumnType.TEXT})
+    assert profile.column_types["0"] == "text"

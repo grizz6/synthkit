@@ -21,25 +21,47 @@ NUMERIC_LIKE_TYPES = {"continuous", "discrete"}
 DEFAULT_RARE_COMBINATION_THRESHOLD = 5
 
 
+def _finite_range(combined: np.ndarray) -> float:
+    """The max-minus-min of `combined`, ignoring NaN/+-inf, falling back to 1.0 when that's
+    not computable (no finite values at all, or every finite value is identical).
+
+    A plain `nanmax - nanmin` breaks in two ways a real column can actually hit: an all-NaN
+    slice raises a RuntimeWarning and returns NaN, and a genuine +-inf value (a division
+    result, a sentinel) makes the range infinite, which silently turns every per-row distance
+    into 0/inf and floods the caller's terminal with "invalid value encountered" warnings.
+    """
+    finite = combined[np.isfinite(combined)]
+    if finite.size == 0:
+        return 1.0
+    value_range = finite.max() - finite.min()
+    return float(value_range) if value_range else 1.0
+
+
 def _column_distance(query: pd.Series, reference: pd.Series, column_type: str) -> np.ndarray:
     if column_type in NUMERIC_LIKE_TYPES:
         q = query.to_numpy(dtype=float)
         r = reference.to_numpy(dtype=float)
-        combined = np.concatenate([q, r])
-        value_range = np.nanmax(combined) - np.nanmin(combined) or 1.0
-        dist = np.abs(q[:, None] - r[None, :]) / value_range
+        value_range = _finite_range(np.concatenate([q, r]))
+        with np.errstate(invalid="ignore"):
+            dist = np.abs(q[:, None] - r[None, :]) / value_range
     elif column_type == "datetime":
         q = pd.to_datetime(query).to_numpy().astype("datetime64[s]").astype("float64")
         r = pd.to_datetime(reference).to_numpy().astype("datetime64[s]").astype("float64")
-        combined = np.concatenate([q, r])
-        value_range = (np.nanmax(combined) - np.nanmin(combined)) or 1.0
-        dist = np.abs(q[:, None] - r[None, :]) / value_range
+        value_range = _finite_range(np.concatenate([q, r]))
+        with np.errstate(invalid="ignore"):
+            dist = np.abs(q[:, None] - r[None, :]) / value_range
     else:
         q = query.astype(str).to_numpy()
         r = reference.astype(str).to_numpy()
         dist = (q[:, None] != r[None, :]).astype(float)
 
-    return np.nan_to_num(dist, nan=1.0)
+    # Gower distance for a single column is meant to live in [0, 1]. Left alone, a genuine
+    # +-inf value in the data would turn `nan_to_num`'s default posinf/neginf fill into
+    # numpy's largest finite float, which would dominate every other column's contribution
+    # once averaged in gower_distance_matrix. Clamping keeps one bad value from drowning out
+    # everything else instead of silently making the whole check meaningless.
+    dist = np.nan_to_num(dist, nan=1.0, posinf=1.0, neginf=1.0)
+    return np.clip(dist, 0.0, 1.0)
 
 
 def gower_distance_matrix(

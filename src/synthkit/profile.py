@@ -114,6 +114,30 @@ class Profile:
         column_types: dict[str, ColumnType] | None = None,
         constraints: list[Constraint] | str | Path | None = None,
     ) -> Profile:
+        # A profile is a JSON artifact, and JSON object keys are always strings -- a profile
+        # fit on a dataframe with e.g. integer column names would save and reload with
+        # column_types keyed by "0"/"1"/... while self.columns stayed [0, 1, ...], and emit()
+        # would then KeyError looking up an int in a str-keyed dict. Coercing to strings once,
+        # up front, means every internal structure (columns, column_types, marginals, ...) is
+        # consistently string-keyed from the start, matching what save/load always produces
+        # anyway, instead of working by coincidence until the first round trip through disk.
+        df = df.rename(columns=str)
+        if column_types:
+            # A caller overriding a non-string-named column (column_types={0: ...}) is keying
+            # by the original identifier; the rename above means lookups now happen by str(0),
+            # so the override dict needs the same treatment or it would silently never match.
+            column_types = {str(k): v for k, v in column_types.items()}
+
+        duplicated = df.columns[df.columns.duplicated()].unique().tolist()
+        if duplicated:
+            # df[col] returns a DataFrame instead of a Series for a duplicated name, which
+            # breaks every .isnull()/.dropna() call downstream with a confusing pandas
+            # internals error ("truth value of a Series is ambiguous") far from the actual
+            # cause. Fail clearly here instead, at the one place that knows what's wrong.
+            # Checking after the str() rename above also catches the rarer case of two
+            # differently-typed columns (an int 1 and a string "1") colliding once stringified.
+            raise ValueError(f"duplicate column name(s) in the input dataframe: {duplicated}")
+
         columns = list(df.columns)
         types = infer_all_types(df, overrides=column_types)
 
