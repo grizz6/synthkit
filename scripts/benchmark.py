@@ -1,4 +1,8 @@
-"""Benchmark: rows/sec and profile size, on a synthetic dataset with a realistic column mix.
+"""Benchmark: rows/sec, profile size, and peak memory, on a realistic column mix.
+
+Covers every metric docs/PLAN.md's "what to measure" section calls for under Performance
+(rows/sec, profile size in KB, memory ceiling) in one script, so there's one place to look
+these numbers up rather than reconstructing them later.
 
 Run with:
 
@@ -9,6 +13,7 @@ from __future__ import annotations
 
 import json
 import time
+import tracemalloc
 
 import numpy as np
 import pandas as pd
@@ -36,24 +41,32 @@ def make_dataset(n: int, seed: int = 0) -> pd.DataFrame:
 def main() -> None:
     df = make_dataset(50_000)
 
+    tracemalloc.start()
     fit_start = time.perf_counter()
     profile = sk.fit(df)
     fit_elapsed = time.perf_counter() - fit_start
+    _, fit_peak_bytes = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
 
     profile_json = json.dumps(profile.to_dict())
     profile_kb = len(profile_json.encode("utf-8")) / 1024
 
     print(f"fit: {len(df):,} rows, {len(df.columns)} columns in {fit_elapsed * 1000:.1f} ms")
+    print(f"fit peak memory: {fit_peak_bytes / 1024 / 1024:.1f} MB")
     print(f"profile size: {profile_kb:.1f} KB")
     print()
-    print("| Rows requested | Time (s) | Rows/sec |")
-    print("|---|---|---|")
+    print("| Rows requested | Time (s) | Rows/sec | Peak memory (MB) |")
+    print("|---|---|---|---|")
 
     for n in ROW_COUNTS:
+        tracemalloc.start()
         start = time.perf_counter()
         sk.emit(profile, n=n, seed=0)
         elapsed = time.perf_counter() - start
-        print(f"| {n:,} | {elapsed:.4f} | {n / elapsed:,.0f} |")
+        _, emit_peak_bytes = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+        emit_peak_mb = emit_peak_bytes / 1024 / 1024
+        print(f"| {n:,} | {elapsed:.4f} | {n / elapsed:,.0f} | {emit_peak_mb:.1f} |")
 
 
 if __name__ == "__main__":
