@@ -1,10 +1,6 @@
-"""A third real-dataset check: Wine Quality, chosen for what the other two don't exercise.
-
-Adult Census and Titanic both mix numeric and categorical columns. Wine Quality is (almost)
-entirely continuous — 11 physicochemical measurements plus an integer quality score — with no
-nulls at all. That makes it a clean stress test for the one thing this whole package exists
-for: does the Gaussian copula preserve the *entire* correlation matrix across many numeric
-columns at once, not just one hand-picked pair?
+"""Wine Quality example: 12 mostly-continuous columns, no nulls. Checks whether the Gaussian
+copula preserves the full correlation matrix across many numeric columns at once, not just
+one pair.
 
 Run with:
 
