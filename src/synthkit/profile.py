@@ -1,8 +1,8 @@
 """The Profile: the single artifact this whole package exists to produce.
 
-`Profile.fit` reads a real dataframe once and reduces it to marginals, a null-pattern model,
-and a copula correlation matrix — no real rows. `Profile.emit` reverses that into as many
-synthetic rows as asked for, deterministically, from nothing but the profile and a seed.
+Profile.fit reads a real dataframe once and reduces it to marginals, a null-pattern model,
+and a copula correlation matrix, with no real rows kept. Profile.emit reverses that into as
+many synthetic rows as asked for, deterministically, from nothing but the profile and a seed.
 """
 
 from __future__ import annotations
@@ -77,8 +77,8 @@ def _pseudo_uniform(ctype: ColumnType, values: pd.Series, marginal: Any) -> np.n
         return category_pseudo_uniform(values.to_numpy(), marginal)
 
     if ctype == ColumnType.BOOLEAN:
-        # Consistent with BooleanMarginal.sample's own convention (u < p_true => True): True's
-        # interval is [0, p_true), False's is [p_true, 1).
+        # Matches BooleanMarginal.sample's convention (u < p_true => True): True's interval
+        # is [0, p_true), False's is [p_true, 1).
         p_true = marginal.probability_true
         midpoint_true = p_true / 2
         midpoint_false = p_true + (1 - p_true) / 2
@@ -115,28 +115,18 @@ class Profile:
         column_types: dict[str, ColumnType] | None = None,
         constraints: list[Constraint] | str | Path | None = None,
     ) -> Profile:
-        # A profile is a JSON artifact, and JSON object keys are always strings -- a profile
-        # fit on a dataframe with e.g. integer column names would save and reload with
-        # column_types keyed by "0"/"1"/... while self.columns stayed [0, 1, ...], and emit()
-        # would then KeyError looking up an int in a str-keyed dict. Coercing to strings once,
-        # up front, means every internal structure (columns, column_types, marginals, ...) is
-        # consistently string-keyed from the start, matching what save/load always produces
-        # anyway, instead of working by coincidence until the first round trip through disk.
+        # JSON object keys are always strings, so column names are coerced up front to stay
+        # consistent across a save/load round trip (a profile fit on integer column names
+        # would otherwise come back with column_types keyed by "0" while columns stayed [0]).
         df = df.rename(columns=str)
         if column_types:
-            # A caller overriding a non-string-named column (column_types={0: ...}) is keying
-            # by the original identifier; the rename above means lookups now happen by str(0),
-            # so the override dict needs the same treatment or it would silently never match.
             column_types = {str(k): v for k, v in column_types.items()}
 
         duplicated = df.columns[df.columns.duplicated()].unique().tolist()
         if duplicated:
-            # df[col] returns a DataFrame instead of a Series for a duplicated name, which
-            # breaks every .isnull()/.dropna() call downstream with a confusing pandas
-            # internals error ("truth value of a Series is ambiguous") far from the actual
-            # cause. Fail clearly here instead, at the one place that knows what's wrong.
-            # Checking after the str() rename above also catches the rarer case of two
-            # differently-typed columns (an int 1 and a string "1") colliding once stringified.
+            # df[col] returns a DataFrame, not a Series, for a duplicated name, which breaks
+            # every .isnull()/.dropna() call downstream with a confusing pandas error. Fail
+            # clearly here instead.
             raise ValueError(f"duplicate column name(s) in the input dataframe: {duplicated}")
 
         columns = list(df.columns)
@@ -175,11 +165,9 @@ class Profile:
                     )
                     for col in copula_columns
                 }
-                # A constant column (every fitted row has the same value) has a degenerate,
-                # zero-variance pseudo-uniform, which drives the correlation matrix to NaN and
-                # crashes Cholesky sampling downstream. Correlation with a constant is
-                # undefined anyway, so drop it from the copula; it still gets sampled
-                # independently from its own marginal in emit().
+                # A constant column has a zero-variance pseudo-uniform, which drives the
+                # correlation matrix to NaN and crashes Cholesky sampling. Drop it from the
+                # copula; it still gets sampled independently from its own marginal in emit().
                 uniform_columns = {
                     col: u for col, u in uniform_columns.items() if np.unique(u).size > 1
                 }
@@ -211,9 +199,6 @@ class Profile:
         key_pools: dict[str, list[Any]] | None = None,
     ) -> pd.DataFrame:
         if n < 0:
-            # Without this, a negative n surfaces many stack frames deep as numpy's own
-            # "negative dimensions are not allowed" from whichever sampling call happens to
-            # allocate an array first -- true, but not helpful at the call site that has n.
             raise ValueError(f"n must be non-negative, got {n}")
 
         rng = np.random.default_rng(seed)
