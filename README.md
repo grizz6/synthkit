@@ -1,35 +1,32 @@
 # synthkit
 
-**pytest fixtures that look like your production data, without your production data.**
-
-> Status: core pipeline implemented and tested (fit, emit, constraints, privacy check, drift
-> detection, CLI). Not yet published to PyPI. See [docs/PLAN.md](docs/PLAN.md) for the full
-> build plan and [CHANGELOG.md](CHANGELOG.md) for what's landed.
+pytest fixtures that look like your production data, without your production data.
 
 ## The problem
 
 Teams hold data with real people in it and can't put those rows in a test suite, a demo
-environment, or a bug report. The usual fallbacks are all bad: Faker (statistically
-meaningless — every column drawn independently, so `age` and `income` don't correlate),
-hand-written fixtures (stale in a month), scrubbed production copies (legally fraught and
-rarely actually anonymous), or nothing at all.
+environment, or a bug report. The usual options are all bad: Faker generates data that's
+statistically meaningless (every column drawn independently, so age and income don't
+correlate), hand-written fixtures go stale within a month, scrubbed production copies are
+legally risky and rarely actually anonymous, and "nothing" just means you get surprised in
+production.
 
 ## What this does
 
-Read a real dataset once. Learn its statistical shape — each column's distribution, the
-dependence structure between columns, null patterns, business rules. Save that shape as a
-small JSON profile containing **no real records**, which you commit to your repo. Generate as
-many synthetic rows as you want from that profile, forever, without touching the real data
-again.
+Read a real dataset once. Learn its statistical shape: each column's distribution, the
+dependence between columns, null patterns, business rules. Save that shape as a small JSON
+profile with no real records in it, commit that to your repo, and generate as many synthetic
+rows as you want from it, forever, without touching the real data again.
 
 ```
-real data  ──fit──►  profile.json  ──emit──►  synthetic rows
+real data  --fit-->  profile.json  --emit-->  synthetic rows
 (once, locally)      (committed)              (in CI, forever)
 ```
 
-## The argument, measured
+## Does it actually work?
 
-Run against the real [UCI Adult Census Income](https://archive.ics.uci.edu/ml/machine-learning-databases/adult/) dataset (see [examples/](examples/) to reproduce):
+Fit against the real [UCI Adult Census Income](https://archive.ics.uci.edu/ml/machine-learning-databases/adult/)
+dataset (see [examples/](examples/) to reproduce this):
 
 | | corr(age, education-num) | corr(hours, income) |
 |---|---|---|
@@ -37,30 +34,22 @@ Run against the real [UCI Adult Census Income](https://archive.ics.uci.edu/ml/ma
 | Faker-style (independently shuffled) | 0.001 | 0.000 |
 | synthkit | 0.065 | 0.183 |
 
-A test whose correctness depends on that correlation — mean hours worked, high income vs low
-income — **passes on real data and on synthkit's output, and fails on Faker-style data.** That's
-the whole pitch: synthkit preserves the joint structure that independent-column sampling
+A test whose correctness depends on that correlation (mean hours worked, high income vs low
+income) passes on real data and on synthkit's output, and fails on Faker-style data. That's
+the whole pitch: it preserves the joint structure that sampling each column independently
 throws away.
 
-synthkit also runs fast enough for a pull-request check: ~2,000,000 rows/sec emitted from a
+It's also fast enough for a pull-request check: roughly 2 million rows/sec emitted from a
 committed profile on a 6-column dataset (see [scripts/benchmark.py](scripts/benchmark.py)).
 
 ## Install
 
-Not yet published to PyPI. For now, install from a checkout:
+Not published to PyPI yet. Install from a checkout:
 
 ```bash
 pip install -e .
 pip install -e ./pytest-synthkit  # optional pytest fixture plugin
 ```
-
-**Naming note:** `synthkit` is already taken on PyPI by an unrelated package. `pytest-synthkit`
-is still available. This doesn't block local development or GitHub distribution — it only
-matters if/when this project actually publishes to PyPI, at which point either this project
-publishes under a different distribution name (imports and the CLI command could stay
-`synthkit`/`synthkit`, only the PyPI listing name would need to change) or the project itself
-gets renamed. Undecided for now; see [docs/PLAN.md](docs/PLAN.md)'s own Day -1 note that this
-check should have happened before any code was written.
 
 ## Usage
 
@@ -85,7 +74,7 @@ synthkit emit profiles/customers.json -n 10000 --seed 42 -o fixtures/customers.p
 # verify what you generated; exits non-zero on failure
 synthkit check fixtures/customers.parquet --profile profiles/customers.json --real data/customers.parquet
 
-# has production drifted away from the profile your fixtures are built on? exits non-zero past a threshold
+# has production drifted away from the profile your fixtures are built on?
 synthkit diff profiles/customers.json data/customers_2026Q3.parquet
 ```
 
@@ -97,30 +86,40 @@ def test_billing_rollup(synth_frame):
 
 ## How it works
 
-1. **Type inference** — continuous, discrete, categorical, boolean, datetime, identifier, or
-   free text, per column ([src/synthkit/types.py](src/synthkit/types.py)).
-2. **Non-parametric marginals** — an empirical CDF for numeric columns, a frequency table for
-   categorical ones, no assumed named distribution
-   ([src/synthkit/marginals.py](src/synthkit/marginals.py)).
-3. **A Gaussian copula** ties the marginals together via rank correlation, so joint structure
-   survives sampling ([src/synthkit/copula.py](src/synthkit/copula.py)).
-4. **Constraints and repair** — business rules (`created_at <= updated_at`, derived columns,
-   conditional nulls, unique/foreign keys) declared separately and enforced after sampling
-   ([src/synthkit/constraints.py](src/synthkit/constraints.py),
-   [src/synthkit/repair.py](src/synthkit/repair.py)).
-5. **A privacy check** — distance-to-closest-record against a real holdout baseline, so "no
-   real records" is measured, not asserted
-   ([src/synthkit/privacy.py](src/synthkit/privacy.py)).
+1. **Type inference** classifies each column as continuous, discrete, categorical, boolean,
+   datetime, identifier, or free text (`src/synthkit/types.py`).
+2. **Marginals** are fit non-parametrically: an empirical CDF for numeric columns, a
+   frequency table for categorical ones, no assumed named distribution
+   (`src/synthkit/marginals.py`).
+3. A **Gaussian copula** ties the marginals together via rank correlation so joint structure
+   survives sampling (`src/synthkit/copula.py`).
+4. **Constraints** (`created_at <= updated_at`, derived columns, conditional nulls, unique or
+   foreign keys) are declared separately and enforced after sampling
+   (`src/synthkit/constraints.py`, `src/synthkit/repair.py`).
+5. A **privacy check** compares distance-to-closest-record against a real holdout baseline,
+   so "no real records" is measured rather than assumed (`src/synthkit/privacy.py`).
 
-See [docs/getting-started.md](docs/getting-started.md) for a full walkthrough and
-[docs/LIMITATIONS.md](docs/LIMITATIONS.md) for what this deliberately does not do.
+## Known limitations
+
+- The copula captures rank correlation, not arbitrary dependence. It won't reproduce a tight
+  nonlinear relationship or a conditional mode.
+- Associating two nominal (unordered) categorical columns requires picking some ordering for
+  them; synthkit orders by frequency, which is an approximation, not exact.
+- Free text columns are approximated by resampling words from the observed vocabulary, not
+  generated. Review any free-text column for PII before sharing a profile built from it.
+- Identifiers are regenerated from a detected format and never modeled statistically, so two
+  identifier columns that were correlated in the original data won't be in the output.
+- `check()`'s privacy comparison is O(n * m) in row count on each side; both sides are
+  batched to keep memory bounded, but a million-row check still takes real time.
+- `synthkit` is already taken on PyPI by an unrelated package. Not a blocker for local
+  development; matters only once this actually publishes.
 
 ## Relationship to SDV
 
-[SDV](https://github.com/sdv-dev/SDV) already exists and does this well for research-grade
-synthetic datasets. synthkit is aimed at a narrower job — test fixtures — which means
-deterministic output, sub-second generation, a small diffable profile format, and a built-in
-privacy check, rather than trained generative models.
+[SDV](https://github.com/sdv-dev/SDV) already does this well for research-grade synthetic
+datasets. synthkit is aimed at a narrower job, test fixtures, which means deterministic
+output, sub-second generation, a small diffable profile format, and a built-in privacy check
+rather than trained generative models.
 
 ## Development
 
@@ -133,4 +132,4 @@ mypy src/synthkit
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE).

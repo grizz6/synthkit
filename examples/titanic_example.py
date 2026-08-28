@@ -66,10 +66,9 @@ def main() -> None:
         rate = dataset.groupby("Pclass")["Survived"].mean().round(3).to_dict()
         print(f"  {name:10s} {rate}")
     print(
-        "  (both Survived and Pclass are categorical, so their association goes through the\n"
-        "  copula's frequency-ordered category mapping rather than exact rank correlation —\n"
-        "  see 'Categorical association is approximate' in docs/LIMITATIONS.md. The direction\n"
-        "  survives (class 1 > class 2 > class 3), the magnitude is compressed.)"
+        "  (both columns are categorical, so their association goes through the copula's\n"
+        "  frequency-ordered category mapping rather than exact rank correlation. Direction\n"
+        "  survives (class 1 > class 2 > class 3), magnitude is compressed.)"
     )
     print()
 
@@ -80,9 +79,9 @@ def main() -> None:
     )
     print(f"passed: {report.passed}")
     print(
-        "  (dcr_ratio > 1 means synthetic rows sit farther from real training rows than a real\n"
-        "  holdout does — good. The nonzero rare-combination count is expected on a small,\n"
-        "  several-categorical-column dataset like this one; see docs/LIMITATIONS.md.)"
+        "  (dcr_ratio > 1 means synthetic rows sit farther from real training rows than a\n"
+        "  real holdout does. A nonzero rare-combination count is expected on a small,\n"
+        "  several-categorical-column dataset like this one.)"
     )
 
     # Name is all-unique -> should be classified an identifier and never leak a real name.
