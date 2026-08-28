@@ -77,9 +77,9 @@ def main() -> None:
     print(f"passed: {report.passed}")
     print()
 
-    # cnt is exactly casual + registered in the real data, every single row -- a genuine
-    # derived-column relationship, not an approximate correlation. The copula models all three
-    # as separately-correlated numeric columns, so without declaring the relationship, it only
+    # cnt is exactly casual + registered in the real data, a genuine derived-column
+    # relationship, not an approximate correlation. The copula models all three as
+    # separately-correlated numeric columns, so without declaring the relationship, it only
     # holds by chance.
     exact_without_constraint = (df["casual"] + df["registered"] == df["cnt"]).mean()
     without_constraint = (synthetic["casual"] + synthetic["registered"] == synthetic["cnt"]).mean()

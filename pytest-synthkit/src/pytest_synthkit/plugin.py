@@ -1,8 +1,4 @@
-"""The `synth_frame` fixture.
-
-Distribution multiplier, per the project plan: people find pytest plugins by searching for
-pytest plugins, not by searching for the library that happens to back them.
-"""
+"""The `synth_frame` fixture."""
 
 from __future__ import annotations
 
@@ -21,10 +17,8 @@ def _load_profile_cached(path: str, mtime_ns: int) -> Profile:
 
 
 def _load_profile(path: str) -> Profile:
-    # Keying the cache on mtime as well as path means a profile re-fit and overwritten mid
-    # test-session (a fixture that regenerates it, a test that calls Profile.fit and saves
-    # over the same file) invalidates the cache automatically instead of silently serving
-    # stale data to every later `synth_frame` call for that path.
+    # Keying on mtime as well as path means a profile overwritten mid test-session
+    # invalidates the cache instead of serving stale data.
     mtime_ns = Path(path).stat().st_mtime_ns
     return _load_profile_cached(path, mtime_ns)
 

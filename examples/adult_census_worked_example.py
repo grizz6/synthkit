@@ -1,11 +1,7 @@
-"""The worked example from Part 4 of the project plan, run against real data.
-
-Downloads the UCI Adult Census Income dataset, fits a synthkit profile on it, and compares
-three things side by side: real data, "Faker-style" data (every column shuffled
-independently, which is what sampling each marginal with no joint model looks like), and
-synthkit's output. Then it writes a small aggregation whose correctness depends on the joint
-distribution between `hours-per-week` and `income`, and shows that test passing on real data,
-passing on synthkit data, and failing on the Faker-style data.
+"""Downloads the UCI Adult Census Income dataset, fits a synthkit profile on it, and compares
+real data, "Faker-style" data (every column shuffled independently), and synthkit's output.
+Writes an aggregation whose correctness depends on the joint distribution between
+hours-per-week and income, passing on real and synthkit data, failing on Faker-style data.
 
 Run with:
 
