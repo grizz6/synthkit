@@ -1,7 +1,7 @@
-.PHONY: install test lint typecheck check benchmark examples docs docs-serve
+.PHONY: install test lint typecheck check benchmark examples
 
 install:
-	pip install -e ".[dev,docs]"
+	pip install -e ".[dev]"
 	pip install -e ./pytest-synthkit
 
 test:
@@ -24,9 +24,3 @@ examples:
 	python examples/titanic_example.py
 	python examples/wine_quality_example.py
 	python examples/bike_sharing_example.py
-
-docs-serve:
-	mkdocs serve
-
-docs:
-	mkdocs build
