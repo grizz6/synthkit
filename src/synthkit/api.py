@@ -15,6 +15,7 @@ from scipy.stats import ks_2samp
 
 from synthkit import privacy as _privacy
 from synthkit.constraints import Constraint
+from synthkit.marginals import to_epoch_seconds
 from synthkit.profile import Profile
 from synthkit.types import ColumnType
 
@@ -51,24 +52,8 @@ def _fidelity_by_column(
             real_values = real[column].dropna().astype(float)
             synthetic_values = synthetic[column].dropna().astype(float)
         elif ctype == "datetime":
-            # Cast through datetime64[s] rather than a bare int64: pandas' default datetime
-            # unit varies (ns historically, us/s increasingly, and can differ between two
-            # Series parsed at different times), so a plain .astype("int64") on each side can
-            # silently compare nanoseconds against seconds -- a factor-of-a-billion mismatch
-            # that makes ks_2samp report two disjoint distributions regardless of actual
-            # fidelity.
-            real_values = (
-                pd.to_datetime(real[column].dropna())
-                .to_numpy()
-                .astype("datetime64[s]")
-                .astype("int64")
-            )
-            synthetic_values = (
-                pd.to_datetime(synthetic[column].dropna())
-                .to_numpy()
-                .astype("datetime64[s]")
-                .astype("int64")
-            )
+            real_values = to_epoch_seconds(real[column].dropna())
+            synthetic_values = to_epoch_seconds(synthetic[column].dropna())
         else:
             continue
 

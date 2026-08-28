@@ -231,17 +231,61 @@ class BooleanMarginal:
         return cls(probability_true=data["probability_true"])
 
 
+def to_epoch_seconds(values: pd.Series) -> np.ndarray:
+    """Convert a datetime Series to whole epoch seconds (int64), handling every wrinkle in one
+    place instead of six call sites each getting it slightly differently.
+
+    Two things go wrong with the naive `.to_numpy().astype("datetime64[s]")`:
+
+    1. pandas' default datetime64 unit varies (ns historically, us/s increasingly, and can
+       differ between two Series parsed at different times), so a bare `.astype("int64")`
+       without normalizing the unit first can compare nanoseconds against seconds elsewhere in
+       the pipeline -- a factor-of-a-billion mismatch that made a KS test report two
+       essentially-identical distributions as completely disjoint before this existed.
+    2. A timezone-aware Series has no meaningful direct cast to `datetime64[s]` at all --
+       numpy has no timezone concept, so casting straight to it silently normalizes to UTC
+       with nothing but a UserWarning as the hint, and if that shift isn't a whole number of
+       hours, whatever granularity daily/hourly data actually had gets thrown off, producing
+       output that doesn't land on the boundaries it should. Converting explicitly first makes
+       that normalization a deliberate, silent-only-because-it's-correct choice: the emitted
+       profile never carries timezone information, every value comes back as a naive UTC
+       timestamp.
+    """
+    # Normalize to a DatetimeIndex rather than working with whatever came in: a plain Series
+    # exposes tz/tz_convert only through its .dt accessor, while DatetimeMarginal.sample's own
+    # return type (a DatetimeIndex) has no .dt accessor at all and would raise AttributeError
+    # on the very same call that works fine for a Series.
+    dt = pd.DatetimeIndex(pd.to_datetime(values))
+    if dt.tz is not None:
+        dt = dt.tz_convert("UTC").tz_localize(None)
+    return dt.to_numpy().astype("datetime64[s]").astype("int64")
+
+
 # Candidate granularities in seconds, largest first: prefer the coarsest granularity that
 # every observed timestamp is an exact multiple of, so daily data emits at midnight rather
 # than at an arbitrary second.
 GRANULARITY_CANDIDATES_SECONDS = [86400, 3600, 60, 1]
 
 
-def _infer_granularity_seconds(epoch_seconds: np.ndarray) -> int:
+def _infer_granularity(epoch_seconds: np.ndarray) -> tuple[int, int]:
+    """The coarsest granularity every timestamp is a multiple of, and the phase (offset from
+    the Unix epoch) that multiple is relative to.
+
+    Checking `epoch_seconds % granularity == 0` directly anchors the grid to the Unix epoch,
+    which only detects "daily" for data that happens to land on UTC midnight. A column
+    recorded as local midnight in a fixed-UTC-offset timezone (say, every day at 05:00 UTC)
+    is just as genuinely daily, but every value has a constant 5-hour phase relative to the
+    epoch that the naive check would call "hourly" instead of noticing the phase and stripping
+    it out. Anchoring the check to one of the observed values instead of the epoch makes the
+    detection invariant to that constant offset; the phase is still returned so `sample()` can
+    reproduce it, since quantizing back to the bare Unix-epoch grid would silently move every
+    generated timestamp by however many hours the offset was.
+    """
+    anchor = int(epoch_seconds.min())
     for granularity in GRANULARITY_CANDIDATES_SECONDS:
-        if np.all(epoch_seconds % granularity == 0):
-            return granularity
-    return 1
+        if np.all((epoch_seconds - anchor) % granularity == 0):
+            return granularity, anchor % granularity
+    return 1, 0
 
 
 @dataclass
@@ -250,25 +294,27 @@ class DatetimeMarginal:
 
     numeric: NumericMarginal
     granularity_seconds: int
+    phase_seconds: int = 0
 
     @classmethod
     def fit(cls, values: pd.Series) -> DatetimeMarginal:
-        clean = pd.to_datetime(values.dropna())
+        clean = values.dropna()
         if clean.empty:
             raise ValueError("cannot fit a datetime marginal on an all-null column")
 
-        # Cast through datetime64[s] rather than dividing a nanosecond int64 by 1e9: pandas'
-        # default datetime unit varies by version (ns historically, us/s increasingly), so
-        # going straight to whole seconds sidesteps having to know which one we got.
-        epoch_seconds = clean.to_numpy().astype("datetime64[s]").astype("int64")
-        granularity = _infer_granularity_seconds(epoch_seconds)
+        epoch_seconds = to_epoch_seconds(clean)
+        granularity, phase = _infer_granularity(epoch_seconds)
         numeric = NumericMarginal.fit(pd.Series(epoch_seconds.astype(float)))
 
-        return cls(numeric=numeric, granularity_seconds=granularity)
+        return cls(numeric=numeric, granularity_seconds=granularity, phase_seconds=phase)
 
     def sample(self, u: np.ndarray) -> pd.DatetimeIndex:
         raw_seconds = self.numeric.sample(u)
-        quantized = np.round(raw_seconds / self.granularity_seconds) * self.granularity_seconds
+        shifted = raw_seconds - self.phase_seconds
+        quantized = (
+            np.round(shifted / self.granularity_seconds) * self.granularity_seconds
+            + self.phase_seconds
+        )
         return pd.to_datetime(quantized.astype("int64"), unit="s")
 
     def to_dict(self) -> dict[str, Any]:
@@ -276,6 +322,7 @@ class DatetimeMarginal:
             "kind": "datetime",
             "numeric": self.numeric.to_dict(),
             "granularity_seconds": self.granularity_seconds,
+            "phase_seconds": self.phase_seconds,
         }
 
     @classmethod
@@ -283,6 +330,7 @@ class DatetimeMarginal:
         return cls(
             numeric=NumericMarginal.from_dict(data["numeric"]),
             granularity_seconds=data["granularity_seconds"],
+            phase_seconds=data.get("phase_seconds", 0),
         )
 
 
