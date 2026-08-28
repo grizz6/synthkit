@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 from synthkit.privacy import (
     _finite_range,
@@ -202,3 +203,25 @@ def test_dcr_ratio_is_neutral_when_holdout_baseline_is_degenerately_zero():
     # a dataset this duplicate-heavy reports the neutral ratio rather than 0.0.
     report = check(df, df, column_types, min_dcr_ratio=0.5)
     assert report.dcr_ratio == 1.0
+
+
+def test_check_rejects_single_row_real_dataset_with_a_clear_error():
+    # Regression test: n_holdout is at least 1 by construction, so a 1-row real dataset left
+    # the training set empty and distance_to_closest_record's .min(axis=1) on a zero-size
+    # array raised a bare "zero-size array to reduction operation minimum which has no
+    # identity" -- confirmed directly -- instead of a message that mentions the real dataset.
+    synthetic = pd.DataFrame({"a": [1.0, 2.0]})
+    real = pd.DataFrame({"a": [5.0]})
+    with pytest.raises(ValueError, match="at least 2"):
+        check(synthetic, real, {"a": "continuous"})
+
+
+def test_check_handles_holdout_fraction_of_one():
+    # Regression test: holdout_fraction=1.0 put every real row into the holdout regardless of
+    # dataset size, leaving training empty and hitting the same zero-size-array crash as the
+    # single-row case above -- confirmed directly on a 100-row dataset.
+    rng = np.random.default_rng(0)
+    real = pd.DataFrame({"a": rng.normal(0, 1, 100)})
+    synthetic = pd.DataFrame({"a": rng.normal(0, 1, 50)})
+    report = check(synthetic, real, {"a": "continuous"}, holdout_fraction=1.0)
+    assert np.isfinite(report.dcr_ratio)

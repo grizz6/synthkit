@@ -114,5 +114,13 @@ them) is what surfaced the `dcr_ratio` bug above.
   wired up but not fired, same as `release.yml`: it only actually publishes once GitHub Pages
   is turned on for this repo (Settings → Pages → Source: "GitHub Actions"), which is a repo
   setting change left for a deliberate decision rather than flipped automatically.
+- `synthkit check` on a real dataset small enough (or a `--holdout-fraction` high enough)
+  that the training split came out empty raised a bare "zero-size array to reduction
+  operation minimum which has no identity" from deep inside numpy, with nothing pointing at
+  the actual cause. Confirmed on a 1-row real dataset and, separately, `holdout_fraction=1.0`
+  on a 100-row one. Now raises a clear error naming the real row count, and caps
+  `n_holdout` so a training split of at least 1 row is always possible when the real dataset
+  itself has 2 or more rows.
+- Added `--version` to the CLI and a `SECURITY.md` vulnerability-reporting policy.
 
 Not yet published to PyPI. No version has been tagged.

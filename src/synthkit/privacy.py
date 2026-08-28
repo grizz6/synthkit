@@ -234,7 +234,18 @@ def check(
 ) -> PrivacyReport:
     rng = np.random.default_rng(seed)
     shuffled_index = rng.permutation(len(real))
-    n_holdout = max(1, int(len(real) * holdout_fraction))
+    n_holdout = max(1, min(len(real) - 1, int(len(real) * holdout_fraction)))
+
+    if len(real) < 2:
+        # n_holdout is at least 1 by construction, so a 1-row real dataset would otherwise
+        # leave training empty -- distance_to_closest_record's .min(axis=1) on a zero-size
+        # array raises a bare "zero-size array to reduction operation minimum which has no
+        # identity" deep inside numpy, far from anything that mentions the real dataset being
+        # too small.
+        raise ValueError(
+            f"real dataset has only {len(real)} row(s); check() needs at least 2 to split "
+            "into a holdout and a training set"
+        )
 
     holdout = real.iloc[shuffled_index[:n_holdout]]
     training = real.iloc[shuffled_index[n_holdout:]]
