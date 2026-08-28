@@ -4,9 +4,16 @@ import numpy as np
 import pandas as pd
 from typer.testing import CliRunner
 
+from synthkit import __version__
 from synthkit.cli import app
 
 runner = CliRunner()
+
+
+def test_version_flag_prints_version_and_exits_zero():
+    result = runner.invoke(app, ["--version"])
+    assert result.exit_code == 0
+    assert __version__ in result.output
 
 
 def make_df(n=1000, seed=0):
