@@ -16,6 +16,22 @@ import pandas as pd
 DEFAULT_N_KNOTS = 100
 
 
+def _encode_non_finite(value: float) -> float | str:
+    if value == float("inf"):
+        return "Infinity"
+    if value == float("-inf"):
+        return "-Infinity"
+    return value
+
+
+def _decode_non_finite(value: float | str) -> float:
+    if value == "Infinity":
+        return float("inf")
+    if value == "-Infinity":
+        return float("-inf")
+    return float(value)
+
+
 @dataclass
 class NumericMarginal:
     """An empirical CDF stored as quantile knots, for continuous or discrete numeric columns."""
@@ -57,7 +73,10 @@ class NumericMarginal:
         return {
             "kind": "numeric",
             "quantile_levels": self.quantile_levels,
-            "quantile_values": self.quantile_values,
+            # A real +-inf value in the source column can end up as a knot (see fit() above).
+            # json.dumps would emit the bare, non-standard tokens Infinity/-Infinity for that,
+            # which most JSON parsers outside Python reject, so encode them as strings instead.
+            "quantile_values": [_encode_non_finite(v) for v in self.quantile_values],
             "is_integer": self.is_integer,
         }
 
@@ -65,7 +84,7 @@ class NumericMarginal:
     def from_dict(cls, data: dict[str, Any]) -> NumericMarginal:
         return cls(
             quantile_levels=data["quantile_levels"],
-            quantile_values=data["quantile_values"],
+            quantile_values=[_decode_non_finite(v) for v in data["quantile_values"]],
             is_integer=data["is_integer"],
         )
 

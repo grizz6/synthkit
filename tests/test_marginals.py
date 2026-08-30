@@ -1,8 +1,11 @@
+import json
+
 import numpy as np
 import pandas as pd
 import pytest
 
 from synthkit.marginals import NumericMarginal
+from synthkit.serialization import dumps
 
 
 def test_numeric_marginal_recovers_median():
@@ -33,6 +36,23 @@ def test_numeric_marginal_round_trip():
     restored = NumericMarginal.from_dict(marginal.to_dict())
     u = np.linspace(0, 1, 25)
     assert np.allclose(marginal.sample(u), restored.sample(u))
+
+
+def test_numeric_marginal_with_infinite_value_serializes_as_valid_json():
+    # Regression test: a genuine +-inf value in the source column becomes a knot (see the
+    # ffill/bfill comment in fit()), and json.dumps emits the bare, non-standard Infinity/
+    # -Infinity tokens for that, which RFC 8259-compliant JSON parsers outside Python reject.
+    values = pd.Series([1.0, 2.0, 3.0, np.inf, 5.0, -np.inf])
+    marginal = NumericMarginal.fit(values)
+    dumped = dumps(marginal.to_dict())
+
+    def reject_bare_constant(token: str) -> None:
+        raise ValueError(f"non-standard bare JSON constant: {token}")
+
+    parsed = json.loads(dumped, parse_constant=reject_bare_constant)
+    restored = NumericMarginal.from_dict(parsed)
+    assert restored.quantile_values[0] == float("-inf")
+    assert restored.quantile_values[-1] == float("inf")
 
 
 def test_numeric_marginal_rejects_all_null_column():
