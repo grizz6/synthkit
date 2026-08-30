@@ -48,8 +48,9 @@ def load_adult() -> pd.DataFrame:
         urllib.request.urlretrieve(DATA_URL, DATA_PATH)
 
     df = pd.read_csv(DATA_PATH, names=COLUMNS, skipinitialspace=True)
-    df = df[df["age"] != "?"].dropna()
     df["income_over_50k"] = (df["income"] == ">50K").astype(int)
+    # "?" missing values in this dataset only ever land in workclass/occupation/native-country,
+    # none of which are kept below, so there's nothing left to filter out here.
     return df[["age", "education-num", "hours-per-week", "income", "income_over_50k"]]
 
 
