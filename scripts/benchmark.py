@@ -7,7 +7,6 @@ Run with:
 
 from __future__ import annotations
 
-import json
 import time
 import tracemalloc
 
@@ -15,6 +14,7 @@ import numpy as np
 import pandas as pd
 
 import synthkit as sk
+from synthkit import serialization
 
 ROW_COUNTS = [1_000, 10_000, 100_000]
 
@@ -44,7 +44,9 @@ def main() -> None:
     _, fit_peak_bytes = tracemalloc.get_traced_memory()
     tracemalloc.stop()
 
-    profile_json = json.dumps(profile.to_dict())
+    # Measure with the same serializer Profile.save() actually uses (indented, rounded), not
+    # a raw json.dumps, so this matches the size of the file that ends up committed to a repo.
+    profile_json = serialization.dumps(profile.to_dict())
     profile_kb = len(profile_json.encode("utf-8")) / 1024
 
     print(f"fit: {len(df):,} rows, {len(df.columns)} columns in {fit_elapsed * 1000:.1f} ms")
