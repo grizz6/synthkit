@@ -113,6 +113,29 @@ def test_check_passes_for_well_formed_fixtures(tmp_path):
     assert "PASSED" in result.output
 
 
+def test_check_reports_a_clean_error_instead_of_a_traceback_for_a_tiny_real_dataset(tmp_path):
+    # Regression test: privacy.check() raises ValueError when the real dataset is too small to
+    # split into a holdout and training set. fit --holdout already caught this as a warning;
+    # the standalone check command let it propagate as a raw Python traceback instead.
+    data_path = tmp_path / "data.csv"
+    pd.DataFrame({"a": [5.0]}).to_csv(data_path, index=False)
+    profile_path = tmp_path / "profile.json"
+    runner.invoke(app, ["fit", str(data_path), "-o", str(profile_path)])
+
+    fixtures_path = tmp_path / "fixtures.csv"
+    pd.DataFrame({"a": [1.0, 2.0]}).to_csv(fixtures_path, index=False)
+
+    result = runner.invoke(
+        app,
+        ["check", str(fixtures_path), "--profile", str(profile_path), "--real", str(data_path)],
+    )
+
+    assert result.exit_code == 1
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    assert "check failed" in result.output
+    assert "at least 2" in result.output
+
+
 def test_check_fails_and_exits_nonzero_when_fixtures_are_real_data(tmp_path):
     data_path = tmp_path / "data.csv"
     make_df(n=500).to_csv(data_path, index=False)

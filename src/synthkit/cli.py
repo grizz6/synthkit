@@ -107,14 +107,18 @@ def check(
     real_df = read_table(real)
     profile_obj = Profile.load(profile)
 
-    report = privacy.check(
-        synthetic,
-        real_df,
-        profile_obj.column_types,
-        holdout_fraction=holdout_fraction,
-        min_dcr_ratio=min_dcr_ratio,
-        rare_combination_threshold=rare_combination_threshold,
-    )
+    try:
+        report = privacy.check(
+            synthetic,
+            real_df,
+            profile_obj.column_types,
+            holdout_fraction=holdout_fraction,
+            min_dcr_ratio=min_dcr_ratio,
+            rare_combination_threshold=rare_combination_threshold,
+        )
+    except ValueError as e:
+        typer.echo(f"check failed: {e}", err=True)
+        raise typer.Exit(code=1) from e
 
     typer.echo(f"dcr_ratio: {report.dcr_ratio:.3f} (min {min_dcr_ratio})")
     typer.echo(f"exact_matches: {report.exact_matches}")
