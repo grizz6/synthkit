@@ -267,7 +267,9 @@ def _infer_granularity(epoch_seconds: np.ndarray) -> tuple[int, int]:
     for granularity in GRANULARITY_CANDIDATES_SECONDS:
         if np.all((epoch_seconds - anchor) % granularity == 0):
             return granularity, anchor % granularity
-    return 1, 0
+    # Unreachable: GRANULARITY_CANDIDATES_SECONDS ends in 1, and every integer is a multiple
+    # of 1, so the loop above always returns before falling off the end.
+    raise AssertionError("no granularity candidate matched; this should never happen")
 
 
 @dataclass
