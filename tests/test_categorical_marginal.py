@@ -109,6 +109,16 @@ def test_numeric_column_with_other_bucket_still_casts_non_other_rows():
     assert set(non_other).issubset(kept_categories)
 
 
+def test_bool_dtype_column_samples_back_as_bool():
+    # A boolean column can reach CategoricalMarginal via an explicit column_types override
+    # (BOOLEAN normally routes to BooleanMarginal instead); the cast-back path was untested.
+    values = pd.Series([True, True, False, True, False] * 20)
+    marginal = CategoricalMarginal.fit(values)
+    assert marginal.value_dtype == "bool"
+    sampled = marginal.sample(np.linspace(0, 1, 50))
+    assert sampled.dtype == bool
+
+
 def test_low_cardinality_float_column_samples_back_as_float():
     values = pd.Series([1.5, 2.5, 1.5, 2.5] * 20)
     marginal = CategoricalMarginal.fit(values)
