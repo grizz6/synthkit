@@ -172,3 +172,22 @@ def test_numeric_drift_is_zero_when_current_column_is_all_null():
     fresh = pd.DataFrame({"amount": [None] * 100})
     report = compute_drift(profile, fresh)
     assert report.column_drift["amount"] == 0.0
+
+
+def test_datetime_drift_is_zero_when_current_column_is_all_null():
+    rng = np.random.default_rng(0)
+    dates = pd.to_datetime("2024-01-01") + pd.to_timedelta(rng.integers(0, 365, 500), unit="D")
+    df = pd.DataFrame({"signup_date": dates})
+    profile = Profile.fit(df)
+    fresh = pd.DataFrame({"signup_date": pd.to_datetime([None] * 100)})
+    report = compute_drift(profile, fresh)
+    assert report.column_drift["signup_date"] == 0.0
+
+
+def test_boolean_drift_is_zero_when_current_column_is_all_null():
+    rng = np.random.default_rng(0)
+    df = pd.DataFrame({"is_active": rng.choice([True, False], size=500)})
+    profile = Profile.fit(df)
+    fresh = pd.DataFrame({"is_active": pd.array([None] * 100, dtype="boolean")})
+    report = compute_drift(profile, fresh)
+    assert report.column_drift["is_active"] == 0.0
