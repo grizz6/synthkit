@@ -45,6 +45,16 @@ def test_identifier_random_token_sample_is_unique():
     assert len(set(sampled)) == 200
 
 
+def test_identifier_random_token_widens_length_instead_of_hanging_when_n_exceeds_keyspace():
+    # Regression test: rejection-sampling for random tokens used to loop forever once n
+    # approached or exceeded the keyspace (36 ** token_length). A 2-char token has only 1296
+    # possible values; requesting 2000 unique ones used to hang indefinitely instead of
+    # widening the token length to make that many unique values possible.
+    marginal = IdentifierMarginal(style="random_token", token_length=2)
+    sampled = marginal.sample(2000, np.random.default_rng(0))
+    assert len(set(sampled)) == 2000
+
+
 def test_identifier_round_trip():
     values = pd.Series([f"ID{i:03d}" for i in range(1, 50)])
     marginal = IdentifierMarginal.fit(values)

@@ -346,10 +346,18 @@ class IdentifierMarginal:
             return np.array([f"{self.prefix}{num:0{width}d}" for num in numbers], dtype=object)
 
         charset = np.array(list(DEFAULT_TOKEN_CHARSET))
+        token_length = self.token_length
+        # Collision-rejection sampling below hangs forever once n approaches or exceeds the
+        # keyspace (len(charset) ** token_length): near exhaustion, almost every draw is a
+        # repeat. Widen the token length until the keyspace comfortably exceeds n instead of
+        # letting a short fitted length (e.g. a 4-char SKU) silently freeze a large emit().
+        while len(charset) ** token_length < max(n * 2, 1):
+            token_length += 1
+
         seen: set[str] = set()
         tokens: list[str] = []
         while len(tokens) < n:
-            batch = rng.choice(charset, size=(n - len(tokens), self.token_length))
+            batch = rng.choice(charset, size=(n - len(tokens), token_length))
             for row in batch:
                 token = "".join(row)
                 if token not in seen:
