@@ -103,6 +103,18 @@ def test_text_marginal_rejects_all_null_column():
         TextMarginal.fit(values)
 
 
+def test_text_marginal_handles_a_column_of_only_blank_strings():
+    # Not all-null (that's rejected above), but every value splits to zero words, leaving no
+    # vocabulary to sample from. A single "" placeholder keeps sample() from crashing on an
+    # empty word_pool instead of reproducing the exact all-blank column.
+    values = pd.Series(["", "   ", ""])
+    marginal = TextMarginal.fit(values)
+    assert marginal.word_pool == [""]
+
+    sampled = marginal.sample(5, np.random.default_rng(0))
+    assert list(sampled) == [""] * 5
+
+
 def test_text_marginal_caps_word_pool_size():
     # A column with far more distinct words than DEFAULT_MAX_WORD_POOL should have its vocabulary
     # subsampled rather than growing the profile unboundedly.
