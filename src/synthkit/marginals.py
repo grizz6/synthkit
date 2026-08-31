@@ -143,8 +143,20 @@ class CategoricalMarginal:
         kept = ordered
 
         if len(ordered) > max_categories:
-            kept = ordered[: max_categories - 1]
-            tail = ordered[max_categories - 1 :]
+            if value_dtype in ("int", "float"):
+                # `ordered` is sorted by value, not frequency, to keep the copula's rank
+                # correlation meaningful (see above). Truncating positions in that list would
+                # keep whichever values are numerically smallest and bucket the rest as
+                # "other" regardless of how common they actually are, e.g. a value that's 90%
+                # of the data landing in "other" just because it's numerically the largest.
+                # Pick the truncation by frequency instead, then keep the result in value order.
+                by_frequency = sorted(counts.index, key=lambda c: -counts[c])
+                keep_set = set(by_frequency[: max_categories - 1])
+                kept = [c for c in ordered if c in keep_set]
+                tail = [c for c in ordered if c not in keep_set]
+            else:
+                kept = ordered[: max_categories - 1]
+                tail = ordered[max_categories - 1 :]
             other_mass = sum(counts[c] for c in tail) / total
 
         probabilities = [counts[c] / total for c in kept]
