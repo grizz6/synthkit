@@ -4,7 +4,7 @@ import pytest
 from scipy.stats import ks_2samp
 
 from synthkit.constraints import Inequality
-from synthkit.profile import Profile
+from synthkit.profile import Profile, _pseudo_uniform
 from synthkit.types import ColumnType
 
 
@@ -235,3 +235,26 @@ def test_column_types_override_matches_by_original_non_string_key():
     df = pd.DataFrame({0: range(30), 1: ["a", "b"] * 15})
     profile = Profile.fit(df, column_types={0: ColumnType.TEXT})
     assert profile.column_types["0"] == "text"
+
+
+def test_emit_produces_resampled_output_for_a_text_column():
+    # A free-text column is never copula-eligible, so it always takes emit()'s TextMarginal
+    # branch outside the copula loop; no existing test actually ran a text column through
+    # Profile.emit() end-to-end (only TextMarginal directly).
+    # High cardinality but not all-unique (a repeated tail), so type inference lands on TEXT
+    # rather than IDENTIFIER.
+    unique_notes = [f"customer reported issue number {i} today" for i in range(30)]
+    notes = unique_notes + unique_notes[:10]
+    df = pd.DataFrame({"amount": np.random.default_rng(0).normal(50, 10, 40), "notes": notes})
+    profile = Profile.fit(df)
+    assert profile.column_types["notes"] == "text"
+
+    synthetic = profile.emit(n=20, seed=0)
+    assert len(synthetic) == 20
+    assert synthetic["notes"].apply(lambda s: isinstance(s, str)).all()
+    assert not set(synthetic["notes"]) & set(notes)  # resampled words, not verbatim originals
+
+
+def test_pseudo_uniform_rejects_a_non_copula_eligible_type():
+    with pytest.raises(ValueError, match="not copula-eligible"):
+        _pseudo_uniform(ColumnType.TEXT, pd.Series(["a", "b"]), marginal=None)
