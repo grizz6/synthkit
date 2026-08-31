@@ -102,7 +102,7 @@ def gower_distance_matrix(
     `compute_value_ranges`) when calling this repeatedly over slices of the same pair, as
     `distance_to_closest_record` does.
     """
-    columns = [c for c in query.columns if c in column_types]
+    columns = [c for c in query.columns if c in column_types and c in reference.columns]
     total = np.zeros((len(query), len(reference)))
 
     for column in columns:
