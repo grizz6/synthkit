@@ -5,6 +5,7 @@ import pytest
 from synthkit.privacy import (
     _finite_range,
     check,
+    compute_value_ranges,
     count_exact_matches,
     count_rare_combination_leaks,
     distance_to_closest_record,
@@ -48,6 +49,34 @@ def test_gower_distance_handles_infinity_without_warning_or_blowup():
     distances = gower_distance_matrix(df, df, {"a": "continuous"})
     assert np.isfinite(distances).all()
     assert (distances >= 0).all() and (distances <= 1).all()
+
+
+def test_compute_value_ranges_covers_datetime_columns():
+    query = pd.DataFrame({"a": pd.to_datetime(["2024-01-01", "2024-01-05"])})
+    reference = pd.DataFrame({"a": pd.to_datetime(["2024-01-01", "2024-01-10"])})
+    ranges = compute_value_ranges(query, reference, {"a": "datetime"})
+    assert ranges["a"] == pytest.approx(9 * 86400)  # 9 days, in seconds
+
+
+def test_compute_value_ranges_skips_a_column_missing_from_either_side():
+    query = pd.DataFrame({"a": [1.0, 2.0]})
+    reference = pd.DataFrame({"a": [1.0], "b": [5.0]})
+    ranges = compute_value_ranges(query, reference, {"a": "continuous", "b": "continuous"})
+    assert "a" in ranges
+    assert "b" not in ranges
+
+
+def test_gower_distance_skips_a_column_missing_from_reference_instead_of_crashing():
+    # Regression test: columns were selected from query.columns intersected with column_types,
+    # but never checked against reference.columns. check()'s real dataframe doesn't have to
+    # carry every column the profile was fit on (see api.py's _fidelity_by_column, which
+    # already guards this the same way); a column missing from reference used to raise a bare
+    # pandas KeyError instead of just being excluded from the distance calculation.
+    query = pd.DataFrame({"a": [1.0], "b": [2.0]})
+    reference = pd.DataFrame({"a": [1.0]})
+    distances = gower_distance_matrix(query, reference, {"a": "continuous", "b": "continuous"})
+    assert distances.shape == (1, 1)
+    assert distances[0, 0] == 0.0
 
 
 def test_gower_distance_categorical_mismatch_contributes_one():
