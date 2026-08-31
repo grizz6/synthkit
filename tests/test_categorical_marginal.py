@@ -23,6 +23,23 @@ def test_numeric_categories_ordered_by_value_not_frequency():
     assert marginal.categories == ["3", "4", "5", "6", "7", "8"]
 
 
+def test_numeric_tail_bucketing_truncates_by_frequency_not_by_value():
+    # Regression test: numeric categoricals are ordered by value (not frequency) so the
+    # copula's rank correlation stays meaningful, but truncation used to slice positions out
+    # of that same value-sorted list. That kept whichever values were numerically smallest and
+    # bucketed the rest as "other" regardless of frequency, so a value making up 90% of the
+    # data got bucketed into __other__ purely because it was numerically the largest, while
+    # four values appearing 5 times each were kept as their own categories.
+    common = [900] * 900
+    rare = [v for v in range(1, 21) for _ in range(5)]
+    values = pd.Series(common + rare)
+
+    marginal = CategoricalMarginal.fit(values, max_categories=5)
+    assert "900" in marginal.categories
+    dominant_index = marginal.categories.index("900")
+    assert marginal.probabilities[dominant_index] == pytest.approx(0.9)
+
+
 def test_boolean_dtype_categories_ordered_false_before_true():
     values = pd.Series([True, True, True, False])
     marginal = CategoricalMarginal.fit(values)
