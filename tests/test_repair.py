@@ -73,6 +73,25 @@ def test_strict_inequality_nudges_datetime_ties_by_one_second():
     assert (fixed["end"].iloc[0] - fixed["start"].iloc[0]) == pd.Timedelta(seconds=1)
 
 
+def test_strict_inequality_nudges_the_other_side_when_datetime_max_would_overflow():
+    # Regression test: pd.Timestamp.max is a realistic "never expires" sentinel value. A tie
+    # at that value used to crash with OverflowError, since nudging the right-hand side later
+    # (the normal fix for a "<" tie) pushes past the largest representable timestamp.
+    top = pd.Timestamp.max
+    df = pd.DataFrame({"start": [top], "end": [top]})
+    fixed = apply_constraints(df, [Inequality("start", "<", "end")])
+    assert fixed["start"].iloc[0] < fixed["end"].iloc[0]
+    assert fixed["end"].iloc[0] == top  # left nudged down instead, right left untouched
+
+
+def test_strict_inequality_nudges_the_other_side_when_datetime_min_would_overflow():
+    bottom = pd.Timestamp.min
+    df = pd.DataFrame({"start": [bottom], "end": [bottom]})
+    fixed = apply_constraints(df, [Inequality("start", ">", "end")])
+    assert fixed["start"].iloc[0] > fixed["end"].iloc[0]
+    assert fixed["end"].iloc[0] == bottom
+
+
 def test_strict_inequality_leaves_string_ties_unresolved():
     # Documented limitation: there's no well-defined "smallest step" for strings, so a tie
     # between two string columns is left as-is rather than guessed at.

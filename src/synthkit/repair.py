@@ -61,7 +61,13 @@ def _repair_inequality(df: pd.DataFrame, constraint: Inequality) -> pd.DataFrame
         tied = df[left] == df[right]
         if tied.any():
             step = 1 if constraint.op == "<" else -1
-            df.loc[tied, right] = _nudge(df.loc[tied, right], step)
+            try:
+                df.loc[tied, right] = _nudge(df.loc[tied, right], step)
+            except OverflowError:
+                # A datetime tie sitting at pd.Timestamp.max/.min (a common "never expires" or
+                # "no start date" sentinel) overflows when nudged further in that direction.
+                # Nudge the other side the opposite way instead.
+                df.loc[tied, left] = _nudge(df.loc[tied, left], -step)
 
     return df
 
