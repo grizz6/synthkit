@@ -290,3 +290,31 @@ def test_diff_fails_and_exits_nonzero_on_drift(tmp_path):
 
     assert result.exit_code == 1
     assert "FAILED" in result.output
+
+
+def test_inspect_prints_a_summary_for_every_column(tmp_path):
+    data_path = tmp_path / "data.csv"
+    make_df().to_csv(data_path, index=False)
+    profile_path = tmp_path / "profile.json"
+    runner.invoke(app, ["fit", str(data_path), "-o", str(profile_path)])
+
+    result = runner.invoke(app, ["inspect", str(profile_path)])
+
+    assert result.exit_code == 0, result.output
+    assert "amount" in result.output
+    assert "plan_tier" in result.output
+    assert "columns" in result.output
+
+
+def test_inspect_reports_a_column_s_null_rate(tmp_path):
+    df = make_df(n=500)
+    df.loc[:99, "amount"] = None  # 20% null
+    data_path = tmp_path / "data.csv"
+    df.to_csv(data_path, index=False)
+    profile_path = tmp_path / "profile.json"
+    runner.invoke(app, ["fit", str(data_path), "-o", str(profile_path)])
+
+    result = runner.invoke(app, ["inspect", str(profile_path)])
+
+    assert result.exit_code == 0, result.output
+    assert "null_rate=0.200" in result.output
