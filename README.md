@@ -76,6 +76,9 @@ synthkit check fixtures/customers.parquet --profile profiles/customers.json --re
 
 # has production drifted away from the profile your fixtures are built on?
 synthkit diff profiles/customers.json data/customers_2026Q3.parquet
+
+# what's actually in a committed profile, without writing code to find out
+synthkit inspect profiles/customers.json
 ```
 
 ```python
