@@ -14,7 +14,7 @@ from typing import Any
 import numpy as np
 from scipy.stats import norm, rankdata
 
-from synthkit.marginals import CategoricalMarginal
+from synthkit.marginals import OTHER_CATEGORY, CategoricalMarginal, escape_other_category
 
 EIGENVALUE_FLOOR = 1e-6
 UNIFORM_EPSILON = 1e-6
@@ -43,9 +43,9 @@ def category_pseudo_uniform(values: np.ndarray, marginal: CategoricalMarginal) -
         category: (cumulative[i] + cumulative[i + 1]) / 2
         for i, category in enumerate(marginal.categories)
     }
-    other_midpoint = midpoints.get("__other__", 0.5)
+    other_midpoint = midpoints.get(OTHER_CATEGORY, 0.5)
     return np.array(
-        [midpoints.get(str(v), other_midpoint) for v in values],
+        [midpoints.get(escape_other_category(str(v)), other_midpoint) for v in values],
         dtype=float,
     )
 
