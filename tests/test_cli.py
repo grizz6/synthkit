@@ -84,6 +84,27 @@ def test_emit_writes_synthetic_table(tmp_path):
     assert len(synthetic) == 50
 
 
+def test_fit_and_emit_round_trip_through_parquet(tmp_path):
+    # Every usage example in the README uses .parquet, not .csv, but no CLI test had actually
+    # exercised that path end-to-end; the pyarrow-as-dev-only-dependency bug fixed earlier this
+    # session would have made this exact fit -> emit sequence crash on a plain pip install.
+    data_path = tmp_path / "data.parquet"
+    make_df().to_parquet(data_path, index=False)
+    profile_path = tmp_path / "profile.json"
+
+    fit_result = runner.invoke(app, ["fit", str(data_path), "-o", str(profile_path)])
+    assert fit_result.exit_code == 0, fit_result.output
+
+    output_path = tmp_path / "synthetic.parquet"
+    emit_result = runner.invoke(
+        app, ["emit", str(profile_path), "-n", "50", "--seed", "1", "-o", str(output_path)]
+    )
+    assert emit_result.exit_code == 0, emit_result.output
+
+    synthetic = pd.read_parquet(output_path)
+    assert len(synthetic) == 50
+
+
 def test_check_passes_for_well_formed_fixtures(tmp_path):
     data_path = tmp_path / "data.csv"
     make_df(n=2000).to_csv(data_path, index=False)
