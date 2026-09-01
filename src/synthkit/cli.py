@@ -1,7 +1,8 @@
-"""The synthkit command-line interface: fit, emit, check, diff.
+"""The synthkit command-line interface: fit, emit, check, diff, inspect.
 
 Kept as a thin layer over the library: every command here is a few lines of glue around
-Profile, privacy.check, or drift.compute_drift. Actual logic belongs in those modules.
+Profile, privacy.check, drift.compute_drift, or inspect.summarize_profile. Actual logic
+belongs in those modules.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ import typer
 from synthkit import __version__, privacy
 from synthkit.constraints import parse_constraints
 from synthkit.drift import DEFAULT_DRIFT_THRESHOLD, compute_drift
+from synthkit.inspect import summarize_profile
 from synthkit.io import read_table, write_table
 from synthkit.privacy import DEFAULT_RARE_COMBINATION_THRESHOLD
 from synthkit.profile import Profile
@@ -153,6 +155,33 @@ def diff(
         raise typer.Exit(code=1)
 
     typer.echo("PASSED: no drift detected")
+
+
+@app.command()
+def inspect(
+    profile: Path = typer.Argument(..., help="profile.json to summarize."),
+) -> None:
+    """Print a human-readable summary of a profile: columns, types, and shape."""
+    profile_obj = Profile.load(profile)
+    summaries = summarize_profile(profile_obj)
+
+    typer.echo(
+        f"{len(profile_obj.columns)} columns, {profile_obj.n_rows_fit} rows fit on, "
+        f"{len(profile_obj.constraints)} constraint(s)"
+    )
+    typer.echo()
+
+    name_width = max((len(s.name) for s in summaries), default=0)
+    type_width = max((len(s.type) for s in summaries), default=0)
+
+    for summary in summaries:
+        copula_flag = "[copula]" if summary.in_copula else ""
+        name_col = f"{summary.name:<{name_width}}"
+        type_col = f"{summary.type:<{type_width}}"
+        line = f"{name_col}  {type_col}  {copula_flag:<8}  {summary.detail}"
+        if summary.null_rate is not None:
+            line += f"  (null_rate={summary.null_rate:.3f})"
+        typer.echo(line)
 
 
 if __name__ == "__main__":
