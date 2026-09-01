@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 from scipy.stats import ks_2samp
 
-from synthkit.constraints import Inequality
+from synthkit.constraints import ForeignKey, Inequality
 from synthkit.profile import Profile, _pseudo_uniform
 from synthkit.types import ColumnType
 
@@ -201,6 +201,17 @@ def test_fit_with_constraints_enforces_them_on_emit():
     profile = Profile.fit(df, constraints=[Inequality("created_at", "<=", "updated_at")])
     synthetic = profile.emit(n=500, seed=0)
     assert (synthetic["created_at"] <= synthetic["updated_at"]).all()
+
+
+def test_fit_with_foreign_key_constraint_samples_from_key_pools_on_emit():
+    # key_pools is a documented parameter of the public emit()/sk.emit() API, but it was only
+    # ever exercised at the repair.apply_constraints() unit level, never through the full
+    # Profile.fit() -> emit(key_pools=...) path a real caller would actually use.
+    df = pd.DataFrame({"customer_id": [0] * 200})
+    profile = Profile.fit(df, constraints=[ForeignKey("customer_id", "customers.id")])
+
+    synthetic = profile.emit(n=200, seed=0, key_pools={"customer_id": [101, 102, 103]})
+    assert set(synthetic["customer_id"]).issubset({101, 102, 103})
 
 
 def test_profile_without_constraints_has_empty_constraint_list():
