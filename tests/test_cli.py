@@ -68,6 +68,46 @@ def test_fit_with_holdout_on_tiny_dataset_warns_but_still_exits_zero(tmp_path):
     assert "self-check skipped" in result.output
 
 
+def test_fit_constraints_flag_loads_and_enforces_a_yaml_file(tmp_path):
+    # The README's own usage example shows --constraints as a first-class CLI flag, but nothing
+    # exercised it through the actual command line: only parse_constraints() directly, and
+    # Profile.fit(constraints=...) through the Python API. This wires it end-to-end.
+    rng = np.random.default_rng(0)
+    df = pd.DataFrame(
+        {
+            "created_at": rng.integers(0, 1000, 500).astype(float),
+            "updated_at": rng.integers(0, 1000, 500).astype(float),
+        }
+    )
+    data_path = tmp_path / "data.csv"
+    df.to_csv(data_path, index=False)
+
+    constraints_path = tmp_path / "constraints.yaml"
+    constraints_path.write_text(
+        "constraints:\n"
+        "  - type: inequality\n"
+        "    left: created_at\n"
+        '    op: "<="\n'
+        "    right: updated_at\n"
+    )
+
+    profile_path = tmp_path / "profile.json"
+    fit_result = runner.invoke(
+        app,
+        ["fit", str(data_path), "-o", str(profile_path), "--constraints", str(constraints_path)],
+    )
+    assert fit_result.exit_code == 0, fit_result.output
+
+    output_path = tmp_path / "synthetic.csv"
+    emit_result = runner.invoke(
+        app, ["emit", str(profile_path), "-n", "300", "--seed", "0", "-o", str(output_path)]
+    )
+    assert emit_result.exit_code == 0, emit_result.output
+
+    synthetic = pd.read_csv(output_path)
+    assert (synthetic["created_at"] <= synthetic["updated_at"]).all()
+
+
 def test_emit_writes_synthetic_table(tmp_path):
     data_path = tmp_path / "data.csv"
     make_df().to_csv(data_path, index=False)
