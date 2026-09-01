@@ -93,6 +93,18 @@ OTHER_CATEGORY = "__other__"
 DEFAULT_MAX_CATEGORIES = 50
 
 
+def escape_other_category(value: str) -> str:
+    """Disambiguate a real value from the reserved long-tail-bucket sentinel.
+
+    OTHER_CATEGORY is added to `categories` as its own entry for the synthesized tail bucket
+    (see CategoricalMarginal.fit). A real value equal to it verbatim would otherwise collide:
+    two entries in `categories` sharing one label breaks anything that looks a category up by
+    name, notably copula.py's category_pseudo_uniform. Both fitting and that lookup need to
+    apply this same escape to a raw value before treating it as a category label.
+    """
+    return f"{OTHER_CATEGORY}_actual" if value == OTHER_CATEGORY else value
+
+
 @dataclass
 class CategoricalMarginal:
     """A category -> frequency table.
@@ -122,6 +134,9 @@ class CategoricalMarginal:
         clean = values.dropna().astype(str)
         if clean.empty:
             raise ValueError("cannot fit a categorical marginal on an all-null column")
+
+        if (clean == OTHER_CATEGORY).any():
+            clean = clean.map(escape_other_category)
 
         counts = clean.value_counts()
 

@@ -7,7 +7,7 @@ from synthkit.copula import (
     nearest_pd_correlation,
     rank_transform_to_uniform,
 )
-from synthkit.marginals import CategoricalMarginal
+from synthkit.marginals import OTHER_CATEGORY, CategoricalMarginal
 
 
 def test_rank_transform_is_monotonic_and_bounded():
@@ -41,6 +41,20 @@ def test_category_pseudo_uniform_orders_by_frequency():
     u = category_pseudo_uniform(values.to_numpy(), marginal)
     # b is the most frequent category and should sit first in [0, 1).
     assert u[values == "b"][0] < u[values == "c"][0] < u[values == "a"][0]
+
+
+def test_category_pseudo_uniform_handles_a_real_value_colliding_with_other_sentinel():
+    # Regression test: category_pseudo_uniform looks category labels up in a dict keyed by
+    # marginal.categories. A real value equal to OTHER_CATEGORY used to collide with the
+    # synthesized tail-bucket entry of the same name, so every row of the real (high-frequency)
+    # category silently got mapped to the tail bucket's interval instead of its own.
+    values = pd.Series([f"cat_{i}" for i in range(60)] + [OTHER_CATEGORY] * 100)
+    marginal = CategoricalMarginal.fit(values, max_categories=10)
+
+    u = category_pseudo_uniform(values.to_numpy(), marginal)
+    other_rows_u = u[values.to_numpy() == OTHER_CATEGORY]
+    assert len(set(other_rows_u)) == 1  # every real __other__ row maps to one consistent point
+    assert other_rows_u[0] < 0.65  # its own interval (majority mass), not the tail bucket's
 
 
 def test_copula_recovers_correlation_structure():

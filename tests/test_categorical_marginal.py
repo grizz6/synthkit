@@ -135,6 +135,20 @@ def test_string_column_still_samples_as_object():
     assert sampled.dtype == object
 
 
+def test_real_value_colliding_with_other_sentinel_is_disambiguated():
+    # Regression test: OTHER_CATEGORY ("__other__") is reserved for the synthesized long-tail
+    # bucket added to `categories` at fit time. A real value that happens to equal it verbatim
+    # used to end up as a second, identically-labeled entry in `categories`, and any dict
+    # keyed by category label (copula.py's category_pseudo_uniform) would then silently
+    # collapse the two, misassigning every row of the real category to the tail bucket's
+    # interval instead of its own.
+    values = pd.Series([f"cat_{i}" for i in range(60)] + [OTHER_CATEGORY] * 100)
+    marginal = CategoricalMarginal.fit(values, max_categories=10)
+
+    assert marginal.categories.count(OTHER_CATEGORY) == 1
+    assert f"{OTHER_CATEGORY}_actual" in marginal.categories
+
+
 def test_rejects_all_null_column():
     values = pd.Series([None, None, None], dtype=object)
     with pytest.raises(ValueError):
