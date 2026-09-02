@@ -304,12 +304,26 @@ def compare(
         readable=True,
         help="The profile as it is now.",
     ),
+    as_json: bool = typer.Option(
+        False, "--json", help="Emit machine-readable JSON instead of formatted text."
+    ),
+    fail_on_change: bool = typer.Option(
+        False,
+        "--fail-on-change",
+        help="Exit non-zero if anything changed, for gating a CI job on an unexpected re-fit.",
+    ),
 ) -> None:
     """Show what changed between two profiles, semantically rather than as a JSON diff."""
     comparison = compare_profiles(Profile.load(old), Profile.load(new))
 
     old_rows, new_rows = comparison.rows_fit
     old_constraints, new_constraints = comparison.constraint_counts
+
+    if as_json:
+        typer.echo(json.dumps(asdict(comparison), indent=2))
+        if fail_on_change and comparison.any_changes:
+            raise typer.Exit(code=1)
+        return
     typer.echo(f"rows fit on: {old_rows} -> {new_rows}")
     typer.echo(f"constraints: {old_constraints} -> {new_constraints}")
     typer.echo()
@@ -328,6 +342,9 @@ def compare(
         typer.echo("no column-level changes")
     else:
         typer.echo(f"\nunchanged: {len(comparison.unchanged)} column(s)")
+
+    if fail_on_change and comparison.any_changes:
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":
