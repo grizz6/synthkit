@@ -1,4 +1,4 @@
-"""The synthkit command-line interface: fit, emit, check, diff, inspect.
+"""The synthkit command-line interface: fit, emit, check, diff, inspect, compare.
 
 Kept as a thin layer over the library: every command here is a few lines of glue around
 Profile, privacy.check, drift.compute_drift, or inspect.summarize_profile. Actual logic
@@ -14,7 +14,7 @@ import typer
 from synthkit import __version__, privacy
 from synthkit.constraints import parse_constraints
 from synthkit.drift import DEFAULT_DRIFT_THRESHOLD, compute_drift
-from synthkit.inspect import summarize_profile
+from synthkit.inspect import compare_profiles, summarize_profile
 from synthkit.io import read_table, write_table
 from synthkit.privacy import DEFAULT_RARE_COMBINATION_THRESHOLD
 from synthkit.profile import Profile
@@ -214,6 +214,36 @@ def inspect(
         if summary.null_rate is not None:
             line += f"  (null_rate={summary.null_rate:.3f})"
         typer.echo(line)
+
+
+@app.command()
+def compare(
+    old: Path = typer.Argument(..., help="The profile as it was (e.g. from git)."),
+    new: Path = typer.Argument(..., help="The profile as it is now."),
+) -> None:
+    """Show what changed between two profiles, semantically rather than as a JSON diff."""
+    comparison = compare_profiles(Profile.load(old), Profile.load(new))
+
+    old_rows, new_rows = comparison.rows_fit
+    old_constraints, new_constraints = comparison.constraint_counts
+    typer.echo(f"rows fit on: {old_rows} -> {new_rows}")
+    typer.echo(f"constraints: {old_constraints} -> {new_constraints}")
+    typer.echo()
+
+    if comparison.added:
+        typer.echo(f"added:   {', '.join(comparison.added)}")
+    if comparison.removed:
+        typer.echo(f"removed: {', '.join(comparison.removed)}")
+
+    for column in comparison.changed:
+        typer.echo(f"changed: {column.name}")
+        for change in column.changes:
+            typer.echo(f"    {change}")
+
+    if not comparison.any_changes:
+        typer.echo("no column-level changes")
+    else:
+        typer.echo(f"\nunchanged: {len(comparison.unchanged)} column(s)")
 
 
 if __name__ == "__main__":

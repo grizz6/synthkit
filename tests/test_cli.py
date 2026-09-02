@@ -418,3 +418,40 @@ def test_inspect_reports_a_column_s_null_rate(tmp_path):
 
     assert result.exit_code == 0, result.output
     assert "null_rate=0.200" in result.output
+
+
+def test_compare_reports_added_removed_and_changed_columns(tmp_path):
+    old_path = tmp_path / "old.csv"
+    pd.DataFrame({"amount": make_df()["amount"], "gone": make_df()["amount"]}).to_csv(
+        old_path, index=False
+    )
+    new_path = tmp_path / "new.csv"
+    pd.DataFrame({"amount": make_df()["amount"] + 500, "fresh": make_df()["amount"]}).to_csv(
+        new_path, index=False
+    )
+
+    old_profile = tmp_path / "old.json"
+    new_profile = tmp_path / "new.json"
+    runner.invoke(app, ["fit", str(old_path), "-o", str(old_profile)])
+    runner.invoke(app, ["fit", str(new_path), "-o", str(new_profile)])
+
+    result = runner.invoke(app, ["compare", str(old_profile), str(new_profile)])
+
+    assert result.exit_code == 0, result.output
+    assert "added:" in result.output
+    assert "fresh" in result.output
+    assert "removed:" in result.output
+    assert "gone" in result.output
+    assert "changed: amount" in result.output
+
+
+def test_compare_says_so_when_nothing_changed(tmp_path):
+    data_path = tmp_path / "data.csv"
+    make_df().to_csv(data_path, index=False)
+    profile_path = tmp_path / "profile.json"
+    runner.invoke(app, ["fit", str(data_path), "-o", str(profile_path)])
+
+    result = runner.invoke(app, ["compare", str(profile_path), str(profile_path)])
+
+    assert result.exit_code == 0, result.output
+    assert "no column-level changes" in result.output
