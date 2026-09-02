@@ -1,3 +1,5 @@
+import json
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -269,3 +271,38 @@ def test_emit_produces_resampled_output_for_a_text_column():
 def test_pseudo_uniform_rejects_a_non_copula_eligible_type():
     with pytest.raises(ValueError, match="not copula-eligible"):
         _pseudo_uniform(ColumnType.TEXT, pd.Series(["a", "b"]), marginal=None)
+
+
+def test_load_tolerates_unknown_fields_from_a_newer_synthkit_version(tmp_path):
+    # A profile is a long-lived artifact committed to a repo and read back by whatever
+    # synthkit version CI happens to be running, so version skew is normal. One written by a
+    # newer version that added a field used to hard-crash with a raw TypeError about an
+    # unexpected keyword argument to Profile.__init__.
+    profile = Profile.fit(pd.DataFrame({"a": [1.0, 2.0, 3.0] * 10}))
+    data = profile.to_dict()
+    data["field_added_in_a_later_version"] = "something"
+    path = tmp_path / "profile.json"
+    path.write_text(json.dumps(data))
+
+    reloaded = Profile.load(path)
+    assert reloaded.columns == profile.columns
+    assert len(reloaded.emit(n=5, seed=0)) == 5
+
+
+def test_load_reports_a_clear_error_for_a_profile_missing_required_fields(tmp_path):
+    # A truncated or hand-edited profile used to surface as a raw TypeError listing
+    # Profile.__init__'s positional arguments, which leaks internals rather than naming
+    # the problem or the file.
+    path = tmp_path / "profile.json"
+    path.write_text(json.dumps({"columns": ["a"], "column_types": {"a": "continuous"}}))
+
+    with pytest.raises(ValueError, match="not a valid synthkit profile"):
+        Profile.load(path)
+
+
+def test_load_reports_a_clear_error_naming_the_file_for_invalid_json(tmp_path):
+    path = tmp_path / "profile.json"
+    path.write_text("{not json at all")
+
+    with pytest.raises(ValueError, match="not valid JSON"):
+        Profile.load(path)

@@ -7,7 +7,8 @@ many synthetic rows as asked for, deterministically, from nothing but the profil
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import json
+from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Any
 
@@ -260,11 +261,30 @@ class Profile:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Profile:
-        return cls(**data)
+        """Rebuild a Profile from its serialized form.
+
+        Unknown keys are ignored rather than rejected: a profile is a long-lived artifact
+        committed to a repo and read back by whatever synthkit version CI happens to be
+        running, so one written by a newer version that added a field still has to load here.
+        """
+        expected = {f.name for f in fields(cls)}
+        missing = sorted(expected - set(data))
+        if missing:
+            raise ValueError(f"profile is missing required field(s): {missing}")
+
+        return cls(**{k: v for k, v in data.items() if k in expected})
 
     def save(self, path: str | Path) -> None:
         serialization.dump(self.to_dict(), path)
 
     @classmethod
     def load(cls, path: str | Path) -> Profile:
-        return cls.from_dict(serialization.load(path))
+        try:
+            data = serialization.load(path)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"{path} is not valid JSON: {e}") from e
+
+        try:
+            return cls.from_dict(data)
+        except ValueError as e:
+            raise ValueError(f"{path} is not a valid synthkit profile: {e}") from e
