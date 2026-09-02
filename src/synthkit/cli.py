@@ -7,6 +7,8 @@ belongs in those modules.
 
 from __future__ import annotations
 
+import json
+from dataclasses import asdict
 from pathlib import Path
 
 import typer
@@ -245,10 +247,27 @@ def inspect(
         readable=True,
         help="profile.json to summarize.",
     ),
+    as_json: bool = typer.Option(
+        False, "--json", help="Emit machine-readable JSON instead of a formatted table."
+    ),
 ) -> None:
     """Print a human-readable summary of a profile: columns, types, and shape."""
     profile_obj = Profile.load(profile)
     summaries = summarize_profile(profile_obj)
+
+    if as_json:
+        typer.echo(
+            json.dumps(
+                {
+                    "columns": len(profile_obj.columns),
+                    "rows_fit": profile_obj.n_rows_fit,
+                    "constraints": len(profile_obj.constraints),
+                    "column_summaries": [asdict(s) for s in summaries],
+                },
+                indent=2,
+            )
+        )
+        return
 
     typer.echo(
         f"{len(profile_obj.columns)} columns, {profile_obj.n_rows_fit} rows fit on, "
