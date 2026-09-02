@@ -185,3 +185,41 @@ def test_compare_detects_a_column_leaving_the_copula():
     comparison = compare_profiles(Profile.fit(varying), Profile.fit(constant))
     b_change = next(c for c in comparison.changed if c.name == "b")
     assert any("copula" in change for change in b_change.changes)
+
+
+def test_compare_handles_two_profiles_sharing_no_columns():
+    rng = np.random.default_rng(0)
+    old = Profile.fit(pd.DataFrame({"x": rng.normal(0, 1, 100)}))
+    new = Profile.fit(pd.DataFrame({"y": rng.normal(0, 1, 100)}))
+
+    comparison = compare_profiles(old, new)
+    assert comparison.added == ["y"]
+    assert comparison.removed == ["x"]
+    assert comparison.changed == []
+    assert comparison.unchanged == []
+    assert comparison.any_changes
+
+
+def test_summarize_handles_an_all_null_column_alongside_a_normal_one():
+    rng = np.random.default_rng(0)
+    profile = Profile.fit(pd.DataFrame({"z": [None] * 50, "k": rng.normal(0, 1, 50)}))
+    by_name = {s.name: s for s in summarize_profile(profile)}
+
+    assert by_name["z"].type == "all_null"
+    assert by_name["z"].null_rate == 1.0
+    assert not by_name["z"].in_copula
+    assert by_name["k"].type == "continuous"
+
+
+def test_compare_describes_a_column_that_stopped_being_all_null():
+    # A column that was entirely null when first fitted and has real values now is one of the
+    # larger changes a re-fit can produce: it gains a type, a shape, and copula membership.
+    rng = np.random.default_rng(0)
+    old = Profile.fit(pd.DataFrame({"z": [None] * 50, "k": rng.normal(0, 1, 50)}))
+    new = Profile.fit(pd.DataFrame({"z": rng.normal(0, 1, 50), "k": rng.normal(0, 1, 50)}))
+
+    change = next(c for c in compare_profiles(old, new).changed if c.name == "z")
+    joined = " ".join(change.changes)
+    assert "all_null -> continuous" in joined
+    assert "null_rate" in joined
+    assert "copula" in joined
