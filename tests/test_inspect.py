@@ -173,3 +173,15 @@ def test_compare_reports_row_counts_and_constraint_counts():
     comparison = compare_profiles(old, new)
     assert comparison.rows_fit == (100, 250)
     assert comparison.constraint_counts == (0, 0)
+
+
+def test_compare_detects_a_column_leaving_the_copula():
+    # A column that becomes constant is dropped from the copula (zero variance would poison
+    # the correlation matrix), which is a real modeling change worth surfacing in a review.
+    rng = np.random.default_rng(0)
+    varying = pd.DataFrame({"a": rng.normal(50, 10, 200), "b": rng.normal(50, 10, 200)})
+    constant = pd.DataFrame({"a": rng.normal(50, 10, 200), "b": [1.5] * 200})
+
+    comparison = compare_profiles(Profile.fit(varying), Profile.fit(constant))
+    b_change = next(c for c in comparison.changed if c.name == "b")
+    assert any("copula" in change for change in b_change.changes)
