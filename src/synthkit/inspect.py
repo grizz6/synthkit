@@ -75,7 +75,9 @@ def _describe(marginal_dict: dict) -> str:
     if isinstance(marginal, TextMarginal):
         return f"free text, {len(marginal.word_pool)}-word vocabulary"
 
-    return "unknown"
+    # Unreachable: MARGINAL_CLASS_BY_KIND maps only to the classes handled above, so a kind
+    # that resolved to a marginal at all matched one of them.
+    raise AssertionError(f"no description for marginal kind {kind!r}")
 
 
 def summarize_profile(profile: Profile) -> list[ColumnSummary]:
