@@ -3,8 +3,9 @@ import re
 import numpy as np
 import pandas as pd
 
-from synthkit.inspect import summarize_profile
+from synthkit.inspect import compare_profiles, summarize_profile
 from synthkit.profile import Profile
+from synthkit.types import ColumnType
 
 
 def test_summarizes_every_column_in_original_order():
@@ -113,3 +114,62 @@ def test_in_copula_reflects_actual_copula_membership():
     assert by_name["amount"].in_copula
     assert not by_name["customer_id"].in_copula  # identifiers are never copula-eligible
     assert not by_name["flat"].in_copula  # constant columns are dropped from the copula
+
+
+def make_numeric_df(n=400, loc=50.0, seed=0):
+    return pd.DataFrame({"amount": np.random.default_rng(seed).normal(loc, 10, n)})
+
+
+def test_compare_reports_no_changes_for_an_identical_profile():
+    profile = Profile.fit(make_numeric_df())
+    comparison = compare_profiles(profile, profile)
+    assert not comparison.any_changes
+    assert comparison.unchanged == ["amount"]
+
+
+def test_compare_detects_added_and_removed_columns():
+    old = Profile.fit(pd.DataFrame({"a": [1.0, 2.0, 3.0] * 10, "gone": [4.0, 5.0, 6.0] * 10}))
+    new = Profile.fit(pd.DataFrame({"a": [1.0, 2.0, 3.0] * 10, "fresh": [7.0, 8.0, 9.0] * 10}))
+
+    comparison = compare_profiles(old, new)
+    assert comparison.added == ["fresh"]
+    assert comparison.removed == ["gone"]
+    assert comparison.any_changes
+
+
+def test_compare_detects_a_shifted_numeric_range():
+    old = Profile.fit(make_numeric_df(loc=50.0))
+    new = Profile.fit(make_numeric_df(loc=500.0))
+
+    comparison = compare_profiles(old, new)
+    assert [c.name for c in comparison.changed] == ["amount"]
+    assert "->" in comparison.changed[0].changes[0]
+
+
+def test_compare_detects_a_changed_null_rate():
+    values = np.random.default_rng(1).normal(50, 10, 500)
+    with_nulls = values.copy()
+    with_nulls[:150] = np.nan
+
+    comparison = compare_profiles(
+        Profile.fit(pd.DataFrame({"amount": values})),
+        Profile.fit(pd.DataFrame({"amount": with_nulls})),
+    )
+    assert any("null_rate" in change for change in comparison.changed[0].changes)
+
+
+def test_compare_detects_a_changed_column_type():
+    old = Profile.fit(pd.DataFrame({"v": [1, 2, 3] * 20}))
+    new = Profile.fit(pd.DataFrame({"v": [1, 2, 3] * 20}), column_types={"v": ColumnType.DISCRETE})
+
+    comparison = compare_profiles(old, new)
+    assert any("type" in change for change in comparison.changed[0].changes)
+
+
+def test_compare_reports_row_counts_and_constraint_counts():
+    old = Profile.fit(make_numeric_df(n=100))
+    new = Profile.fit(make_numeric_df(n=250))
+
+    comparison = compare_profiles(old, new)
+    assert comparison.rows_fit == (100, 250)
+    assert comparison.constraint_counts == (0, 0)
