@@ -65,10 +65,21 @@ def _parse_column_types(overrides: list[str]) -> dict[str, ColumnType]:
 
 @app.command()
 def fit(
-    data: Path = typer.Argument(..., help="Real dataset to fit a profile on (.parquet or .csv)."),
+    data: Path = typer.Argument(
+        ...,
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        help="Real dataset to fit a profile on (.parquet or .csv).",
+    ),
     output: Path = typer.Option(..., "-o", "--output", help="Where to write profile.json."),
     constraints: Path | None = typer.Option(
-        None, "--constraints", help="YAML file declaring business-rule constraints."
+        None,
+        "--constraints",
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        help="YAML file declaring business-rule constraints.",
     ),
     column_type: list[str] = typer.Option(
         [],
@@ -109,7 +120,13 @@ def fit(
 
 @app.command()
 def emit(
-    profile: Path = typer.Argument(..., help="profile.json produced by `synthkit fit`."),
+    profile: Path = typer.Argument(
+        ...,
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        help="profile.json produced by `synthkit fit`.",
+    ),
     n: int = typer.Option(..., "-n", help="Number of synthetic rows to generate."),
     seed: int = typer.Option(..., "--seed", help="Random seed; same seed always emits same rows."),
     output: Path = typer.Option(..., "-o", "--output", help="Where to write the synthetic table."),
@@ -123,10 +140,28 @@ def emit(
 
 @app.command()
 def check(
-    fixtures: Path = typer.Argument(..., help="Synthetic table produced by `synthkit emit`."),
-    profile: Path = typer.Option(..., "--profile", help="profile.json the fixtures came from."),
+    fixtures: Path = typer.Argument(
+        ...,
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        help="Synthetic table produced by `synthkit emit`.",
+    ),
+    profile: Path = typer.Option(
+        ...,
+        "--profile",
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        help="profile.json the fixtures came from.",
+    ),
     real: Path = typer.Option(
-        ..., "--real", help="The original real dataset, for the DCR baseline."
+        ...,
+        "--real",
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        help="The original real dataset, for the DCR baseline.",
     ),
     min_dcr_ratio: float = typer.Option(
         1.0, "--min-dcr-ratio", help="Minimum acceptable synthetic/holdout DCR ratio."
@@ -167,8 +202,20 @@ def check(
 
 @app.command()
 def diff(
-    profile: Path = typer.Argument(..., help="profile.json to compare against."),
-    data: Path = typer.Argument(..., help="Fresh data to check for drift away from the profile."),
+    profile: Path = typer.Argument(
+        ...,
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        help="profile.json to compare against.",
+    ),
+    data: Path = typer.Argument(
+        ...,
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        help="Fresh data to check for drift away from the profile.",
+    ),
     threshold: float = typer.Option(DEFAULT_DRIFT_THRESHOLD, "--threshold"),
 ) -> None:
     """Check whether fresh data has drifted away from the profile fixtures are built on."""
@@ -191,7 +238,13 @@ def diff(
 
 @app.command()
 def inspect(
-    profile: Path = typer.Argument(..., help="profile.json to summarize."),
+    profile: Path = typer.Argument(
+        ...,
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        help="profile.json to summarize.",
+    ),
 ) -> None:
     """Print a human-readable summary of a profile: columns, types, and shape."""
     profile_obj = Profile.load(profile)
@@ -218,8 +271,20 @@ def inspect(
 
 @app.command()
 def compare(
-    old: Path = typer.Argument(..., help="The profile as it was (e.g. from git)."),
-    new: Path = typer.Argument(..., help="The profile as it is now."),
+    old: Path = typer.Argument(
+        ...,
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        help="The profile as it was (e.g. from git).",
+    ),
+    new: Path = typer.Argument(
+        ...,
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        help="The profile as it is now.",
+    ),
 ) -> None:
     """Show what changed between two profiles, semantically rather than as a JSON diff."""
     comparison = compare_profiles(Profile.load(old), Profile.load(new))
