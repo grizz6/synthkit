@@ -104,3 +104,19 @@ def _coerce_constraint(item: dict[str, Any] | Constraint) -> Constraint:
 
 def constraints_to_dicts(constraints: list[Constraint]) -> list[dict[str, Any]]:
     return [_constraint_to_dict(c) for c in constraints]
+
+
+def referenced_columns(constraint: Constraint) -> list[str]:
+    """The dataframe columns a constraint names directly.
+
+    Expression strings (`Derived.expr`, `ConditionalNull.null_when`) are deliberately not
+    parsed: pandas' own eval already reports an undefined name inside one, and parsing its
+    expression grammar here to find column references would be a second, worse implementation
+    of that. This covers only the fields that name a column outright, which is what a typo in
+    a hand-written YAML constraint file usually lands in.
+    """
+    if isinstance(constraint, Inequality):
+        return [constraint.left, constraint.right]
+    if isinstance(constraint, Unique):
+        return list(constraint.columns)
+    return [constraint.column]
