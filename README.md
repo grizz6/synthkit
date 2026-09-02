@@ -82,6 +82,9 @@ synthkit inspect profiles/customers.json
 
 # type inference is a heuristic; override it when it guesses wrong
 synthkit fit data/customers.parquet -o profiles/customers.json --column-type rating=discrete
+
+# reviewing a re-fitted profile in a PR: what actually changed, not a wall of shifted floats
+synthkit compare profiles/customers.json profiles/customers.new.json
 ```
 
 ```python
