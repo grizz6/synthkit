@@ -16,7 +16,12 @@ import numpy as np
 import pandas as pd
 
 from synthkit import serialization
-from synthkit.constraints import Constraint, constraints_to_dicts, parse_constraints
+from synthkit.constraints import (
+    Constraint,
+    constraints_to_dicts,
+    parse_constraints,
+    referenced_columns,
+)
 from synthkit.copula import GaussianCopula, category_pseudo_uniform, rank_transform_to_uniform
 from synthkit.marginals import (
     BooleanMarginal,
@@ -180,6 +185,19 @@ class Profile:
                 copula_columns = []
 
         parsed_constraints = parse_constraints(constraints) if constraints else []
+
+        # Catch a mistyped column name here rather than at emit() time, where it surfaces as a
+        # bare KeyError from pandas or, for ConditionalNull, as no error at all: the repair
+        # engine assigns into df[column], so a typo silently invents a phantom all-null column
+        # in the emitted output instead of nulling the intended one.
+        known = set(columns)
+        for constraint in parsed_constraints:
+            missing = [c for c in referenced_columns(constraint) if c not in known]
+            if missing:
+                raise ValueError(
+                    f"{type(constraint).__name__} constraint references column(s) not in the "
+                    f"dataframe: {missing}"
+                )
 
         return cls(
             columns=columns,

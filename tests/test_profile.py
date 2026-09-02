@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 from scipy.stats import ks_2samp
 
-from synthkit.constraints import ForeignKey, Inequality
+from synthkit.constraints import ConditionalNull, ForeignKey, Inequality, Unique
 from synthkit.profile import Profile, _pseudo_uniform
 from synthkit.types import ColumnType
 
@@ -271,6 +271,37 @@ def test_emit_produces_resampled_output_for_a_text_column():
 def test_pseudo_uniform_rejects_a_non_copula_eligible_type():
     with pytest.raises(ValueError, match="not copula-eligible"):
         _pseudo_uniform(ColumnType.TEXT, pd.Series(["a", "b"]), marginal=None)
+
+
+def test_conditional_null_typo_is_rejected_rather_than_inventing_a_phantom_column():
+    # Regression test: the repair engine assigns into df[column], so a mistyped column name in
+    # a ConditionalNull used to silently add an all-null column that was never in the real
+    # data and isn't in the profile's own schema, with no error anywhere.
+    df = pd.DataFrame({"a": [1.0, 2.0, 3.0] * 10, "b": [4.0, 5.0, 6.0] * 10})
+    with pytest.raises(ValueError, match="ConditionalNull constraint references column"):
+        Profile.fit(df, constraints=[ConditionalNull("cancelled_att", "a > 1")])
+
+
+def test_inequality_referencing_an_unknown_column_fails_at_fit_time():
+    # Previously this surfaced as a bare KeyError from pandas at emit() time, with nothing
+    # naming the constraint responsible.
+    df = pd.DataFrame({"a": [1.0, 2.0, 3.0] * 10, "b": [4.0, 5.0, 6.0] * 10})
+    with pytest.raises(ValueError, match="Inequality constraint references column"):
+        Profile.fit(df, constraints=[Inequality("a", "<=", "nonexistent")])
+
+
+def test_unique_and_foreign_key_column_typos_are_rejected():
+    df = pd.DataFrame({"a": [1.0, 2.0, 3.0] * 10})
+    with pytest.raises(ValueError, match="Unique constraint references column"):
+        Profile.fit(df, constraints=[Unique(["nope"])])
+    with pytest.raises(ValueError, match="ForeignKey constraint references column"):
+        Profile.fit(df, constraints=[ForeignKey("nope", "customers.id")])
+
+
+def test_valid_constraints_still_fit_and_emit():
+    df = pd.DataFrame({"a": [1.0, 2.0, 3.0] * 10, "b": [4.0, 5.0, 6.0] * 10})
+    profile = Profile.fit(df, constraints=[Inequality("a", "<=", "b")])
+    assert len(profile.emit(n=5, seed=0)) == 5
 
 
 def test_load_tolerates_unknown_fields_from_a_newer_synthkit_version(tmp_path):
