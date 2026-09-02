@@ -455,3 +455,59 @@ def test_compare_says_so_when_nothing_changed(tmp_path):
 
     assert result.exit_code == 0, result.output
     assert "no column-level changes" in result.output
+
+
+def test_commands_reject_a_missing_input_file_without_a_traceback(tmp_path):
+    # Regression test: a path typo is the most common CLI mistake there is, and every command
+    # used to answer it with a full Python traceback from pandas or pathlib internals rather
+    # than saying the file wasn't there.
+    missing = tmp_path / "does_not_exist.json"
+    missing_data = tmp_path / "does_not_exist.csv"
+    out = tmp_path / "out.csv"
+
+    invocations = [
+        ["inspect", str(missing)],
+        ["compare", str(missing), str(missing)],
+        ["fit", str(missing_data), "-o", str(out)],
+        ["emit", str(missing), "-n", "5", "--seed", "0", "-o", str(out)],
+        ["diff", str(missing), str(missing_data)],
+    ]
+
+    for args in invocations:
+        result = runner.invoke(app, args)
+        assert result.exit_code != 0, args
+        assert "does not exist" in result.output, args
+        assert "Traceback" not in result.output, args
+
+
+def test_check_rejects_missing_profile_and_real_files(tmp_path):
+    data_path = tmp_path / "data.csv"
+    make_df(n=100).to_csv(data_path, index=False)
+    missing = tmp_path / "gone.json"
+
+    result = runner.invoke(
+        app, ["check", str(data_path), "--profile", str(missing), "--real", str(data_path)]
+    )
+
+    assert result.exit_code != 0
+    assert "does not exist" in result.output
+
+
+def test_fit_rejects_a_missing_constraints_file(tmp_path):
+    data_path = tmp_path / "data.csv"
+    make_df(n=100).to_csv(data_path, index=False)
+
+    result = runner.invoke(
+        app,
+        [
+            "fit",
+            str(data_path),
+            "-o",
+            str(tmp_path / "profile.json"),
+            "--constraints",
+            str(tmp_path / "missing.yaml"),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "does not exist" in result.output
