@@ -540,3 +540,57 @@ def test_inspect_json_reports_null_rate_as_null_when_absent(tmp_path):
     amount = next(c for c in parsed["column_summaries"] if c["name"] == "amount")
     assert amount["null_rate"] is None
     assert amount["in_copula"] is True
+
+
+def _fit_two_profiles(tmp_path, shift=0.0):
+    """Fit an 'old' and a 'new' profile; a nonzero shift makes them genuinely differ."""
+    old_path, new_path = tmp_path / "old.csv", tmp_path / "new.csv"
+    make_df().to_csv(old_path, index=False)
+    shifted = make_df()
+    shifted["amount"] = shifted["amount"] + shift
+    shifted.to_csv(new_path, index=False)
+
+    old_profile, new_profile = tmp_path / "old.json", tmp_path / "new.json"
+    runner.invoke(app, ["fit", str(old_path), "-o", str(old_profile)])
+    runner.invoke(app, ["fit", str(new_path), "-o", str(new_profile)])
+    return old_profile, new_profile
+
+
+def test_compare_json_flag_emits_parseable_json(tmp_path):
+    old_profile, new_profile = _fit_two_profiles(tmp_path, shift=500.0)
+
+    result = runner.invoke(app, ["compare", str(old_profile), str(new_profile), "--json"])
+
+    assert result.exit_code == 0, result.output
+    parsed = json.loads(result.output)
+    assert parsed["rows_fit"] == [1000, 1000]
+    assert [c["name"] for c in parsed["changed"]] == ["amount"]
+
+
+def test_compare_fail_on_change_exits_nonzero_when_something_changed(tmp_path):
+    old_profile, new_profile = _fit_two_profiles(tmp_path, shift=500.0)
+
+    result = runner.invoke(app, ["compare", str(old_profile), str(new_profile), "--fail-on-change"])
+
+    assert result.exit_code == 1
+
+
+def test_compare_fail_on_change_exits_zero_when_nothing_changed(tmp_path):
+    old_profile, _ = _fit_two_profiles(tmp_path)
+
+    result = runner.invoke(app, ["compare", str(old_profile), str(old_profile), "--fail-on-change"])
+
+    assert result.exit_code == 0
+    assert "no column-level changes" in result.output
+
+
+def test_compare_json_and_fail_on_change_combine(tmp_path):
+    # --json returns early, so the exit code has to be applied on that path too.
+    old_profile, new_profile = _fit_two_profiles(tmp_path, shift=500.0)
+
+    result = runner.invoke(
+        app, ["compare", str(old_profile), str(new_profile), "--json", "--fail-on-change"]
+    )
+
+    assert result.exit_code == 1
+    assert json.loads(result.output)["changed"]
