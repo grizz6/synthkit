@@ -79,6 +79,9 @@ synthkit diff profiles/customers.json data/customers_2026Q3.parquet
 
 # what's actually in a committed profile, without writing code to find out
 synthkit inspect profiles/customers.json
+
+# type inference is a heuristic; override it when it guesses wrong
+synthkit fit data/customers.parquet -o profiles/customers.json --column-type rating=discrete
 ```
 
 ```python
