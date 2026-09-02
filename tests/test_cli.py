@@ -6,6 +6,7 @@ from typer.testing import CliRunner
 
 from synthkit import __version__
 from synthkit.cli import app
+from synthkit.profile import Profile
 
 runner = CliRunner()
 
@@ -106,6 +107,105 @@ def test_fit_constraints_flag_loads_and_enforces_a_yaml_file(tmp_path):
 
     synthetic = pd.read_csv(output_path)
     assert (synthetic["created_at"] <= synthetic["updated_at"]).all()
+
+
+def make_rating_df(n=500, seed=0):
+    rng = np.random.default_rng(seed)
+    # A small-integer column: type inference lands on categorical, which is often right for a
+    # rating but wrong when the caller wants it modeled as a discrete numeric.
+    return pd.DataFrame({"rating": rng.integers(1, 6, n), "amount": rng.normal(50, 10, n)})
+
+
+def test_column_type_flag_overrides_inference(tmp_path):
+    data_path = tmp_path / "data.csv"
+    make_rating_df().to_csv(data_path, index=False)
+    profile_path = tmp_path / "profile.json"
+
+    result = runner.invoke(
+        app,
+        ["fit", str(data_path), "-o", str(profile_path), "--column-type", "rating=discrete"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert Profile.load(profile_path).column_types["rating"] == "discrete"
+
+
+def test_column_type_flag_is_repeatable(tmp_path):
+    data_path = tmp_path / "data.csv"
+    make_rating_df().to_csv(data_path, index=False)
+    profile_path = tmp_path / "profile.json"
+
+    result = runner.invoke(
+        app,
+        [
+            "fit",
+            str(data_path),
+            "-o",
+            str(profile_path),
+            "--column-type",
+            "rating=discrete",
+            "--column-type",
+            "amount=text",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    types = Profile.load(profile_path).column_types
+    assert types["rating"] == "discrete"
+    assert types["amount"] == "text"
+
+
+def test_column_type_flag_rejects_an_unknown_type(tmp_path):
+    data_path = tmp_path / "data.csv"
+    make_rating_df().to_csv(data_path, index=False)
+
+    result = runner.invoke(
+        app,
+        [
+            "fit",
+            str(data_path),
+            "-o",
+            str(tmp_path / "profile.json"),
+            "--column-type",
+            "rating=nonsense",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "unknown column type" in result.output
+
+
+def test_column_type_flag_rejects_a_malformed_pair(tmp_path):
+    data_path = tmp_path / "data.csv"
+    make_rating_df().to_csv(data_path, index=False)
+
+    result = runner.invoke(
+        app,
+        ["fit", str(data_path), "-o", str(tmp_path / "profile.json"), "--column-type", "rating"],
+    )
+
+    assert result.exit_code != 0
+    assert "NAME=TYPE" in result.output
+
+
+def test_column_type_flag_rejects_a_column_not_in_the_dataset(tmp_path):
+    data_path = tmp_path / "data.csv"
+    make_rating_df().to_csv(data_path, index=False)
+
+    result = runner.invoke(
+        app,
+        [
+            "fit",
+            str(data_path),
+            "-o",
+            str(tmp_path / "profile.json"),
+            "--column-type",
+            "not_a_column=datetime",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "not present in" in result.output
 
 
 def test_emit_writes_synthetic_table(tmp_path):

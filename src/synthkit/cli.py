@@ -18,6 +18,7 @@ from synthkit.inspect import summarize_profile
 from synthkit.io import read_table, write_table
 from synthkit.privacy import DEFAULT_RARE_COMBINATION_THRESHOLD
 from synthkit.profile import Profile
+from synthkit.types import ColumnType
 
 app = typer.Typer(add_completion=False, help="Synthetic test fixtures from a real dataset's shape.")
 
@@ -41,12 +42,38 @@ def main(
     pass
 
 
+def _parse_column_types(overrides: list[str]) -> dict[str, ColumnType]:
+    """Parse repeated `--column-type name=type` flags into Profile.fit's column_types dict."""
+    parsed: dict[str, ColumnType] = {}
+
+    for override in overrides:
+        name, separator, raw_type = override.partition("=")
+        if not separator or not name:
+            raise typer.BadParameter(
+                f"expected NAME=TYPE, got {override!r} (e.g. --column-type signup_at=datetime)"
+            )
+        try:
+            parsed[name] = ColumnType(raw_type)
+        except ValueError:
+            valid = ", ".join(sorted(t.value for t in ColumnType))
+            raise typer.BadParameter(
+                f"unknown column type {raw_type!r} for {name!r}; expected one of: {valid}"
+            ) from None
+
+    return parsed
+
+
 @app.command()
 def fit(
     data: Path = typer.Argument(..., help="Real dataset to fit a profile on (.parquet or .csv)."),
     output: Path = typer.Option(..., "-o", "--output", help="Where to write profile.json."),
     constraints: Path | None = typer.Option(
         None, "--constraints", help="YAML file declaring business-rule constraints."
+    ),
+    column_type: list[str] = typer.Option(
+        [],
+        "--column-type",
+        help="Override inferred type as NAME=TYPE (e.g. signup_at=datetime). Repeatable.",
     ),
     holdout: float = typer.Option(
         0.0,
@@ -57,8 +84,13 @@ def fit(
     """Fit a profile on real data. No real rows are written to `output`."""
     df = read_table(data)
     parsed_constraints = parse_constraints(constraints) if constraints else None
+    column_types = _parse_column_types(column_type)
 
-    profile = Profile.fit(df, constraints=parsed_constraints)
+    unknown = sorted(set(column_types) - set(df.columns.astype(str)))
+    if unknown:
+        raise typer.BadParameter(f"--column-type names not present in {data}: {unknown}")
+
+    profile = Profile.fit(df, column_types=column_types or None, constraints=parsed_constraints)
     profile.save(output)
     typer.echo(f"wrote profile for {len(df)} rows, {len(df.columns)} columns -> {output}")
 
