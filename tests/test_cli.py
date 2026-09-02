@@ -1,3 +1,4 @@
+import json
 import re
 
 import numpy as np
@@ -511,3 +512,31 @@ def test_fit_rejects_a_missing_constraints_file(tmp_path):
 
     assert result.exit_code != 0
     assert "does not exist" in result.output
+
+
+def test_inspect_json_flag_emits_parseable_json(tmp_path):
+    data_path = tmp_path / "data.csv"
+    make_df().to_csv(data_path, index=False)
+    profile_path = tmp_path / "profile.json"
+    runner.invoke(app, ["fit", str(data_path), "-o", str(profile_path)])
+
+    result = runner.invoke(app, ["inspect", str(profile_path), "--json"])
+
+    assert result.exit_code == 0, result.output
+    parsed = json.loads(result.output)
+    assert parsed["columns"] == 2
+    assert parsed["rows_fit"] == 1000
+    names = [c["name"] for c in parsed["column_summaries"]]
+    assert names == ["amount", "plan_tier"]
+
+
+def test_inspect_json_reports_null_rate_as_null_when_absent(tmp_path):
+    data_path = tmp_path / "data.csv"
+    make_df().to_csv(data_path, index=False)
+    profile_path = tmp_path / "profile.json"
+    runner.invoke(app, ["fit", str(data_path), "-o", str(profile_path)])
+
+    parsed = json.loads(runner.invoke(app, ["inspect", str(profile_path), "--json"]).output)
+    amount = next(c for c in parsed["column_summaries"] if c["name"] == "amount")
+    assert amount["null_rate"] is None
+    assert amount["in_copula"] is True
