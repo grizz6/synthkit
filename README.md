@@ -85,6 +85,12 @@ synthkit fit data/customers.parquet -o profiles/customers.json --column-type rat
 
 # reviewing a re-fitted profile in a PR: what actually changed, not a wall of shifted floats
 synthkit compare profiles/customers.json profiles/customers.new.json
+
+# both inspect and compare speak JSON, for scripting against in CI
+synthkit inspect profiles/customers.json --json | jq '.column_summaries[] | select(.null_rate > 0.5)'
+
+# gate a build: fail if a fresh fit no longer matches the committed profile
+synthkit compare profiles/customers.json profiles/customers.new.json --fail-on-change
 ```
 
 ```python
