@@ -18,7 +18,11 @@ SUPPORTED_SUFFIXES = {".parquet", ".csv"}
 # otherwise misclassify it as a garbled high-cardinality categorical. Restricting detection to
 # a strict ISO-8601 pattern (rather than pandas' lenient freeform date parser) avoids false
 # positives like a "02139" zip code, which pd.to_datetime happily misreads as the year 2139.
-_ISO_DATETIME_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}:\d{2}(\.\d+)?)?$")
+# The optional trailing group covers timezone-aware timestamps (Z, +00:00, -0500), which is
+# how a created_at column from any real database serializes.
+_ISO_DATETIME_PATTERN = re.compile(
+    r"^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})?)?$"
+)
 
 
 def _parse_iso_datetime_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -29,7 +33,13 @@ def _parse_iso_datetime_columns(df: pd.DataFrame) -> pd.DataFrame:
         non_null = series.dropna().astype(str)
         if non_null.empty or not non_null.str.match(_ISO_DATETIME_PATTERN).all():
             continue
-        df[column] = pd.to_datetime(series, errors="coerce")
+        try:
+            df[column] = pd.to_datetime(series, errors="coerce")
+        except ValueError:
+            # Timestamps whose offsets differ row to row have no single tz to resolve to;
+            # pandas rejects them outright rather than coercing. Leaving the column as text is
+            # better than failing the whole read over one ambiguous column.
+            continue
     return df
 
 
