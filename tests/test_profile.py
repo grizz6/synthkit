@@ -337,3 +337,31 @@ def test_load_reports_a_clear_error_naming_the_file_for_invalid_json(tmp_path):
 
     with pytest.raises(ValueError, match="not valid JSON"):
         Profile.load(path)
+
+
+def test_fit_names_the_column_and_type_when_a_marginal_cannot_be_fit():
+    # Regression test: fitting the wrong marginal for a column's actual values fails deep
+    # inside pandas/numpy with messages like "could not convert string to float" that name
+    # neither the column nor the requested type. That is easy to hit through an explicit
+    # column_types override (or the CLI's --column-type), where the type is the caller's
+    # choice rather than something inference decided.
+    df = pd.DataFrame({"notes": ["hello world", "foo bar", "baz qux"] * 10})
+
+    with pytest.raises(ValueError, match=r"could not fit column 'notes' as continuous"):
+        Profile.fit(df, column_types={"notes": ColumnType.CONTINUOUS})
+
+
+def test_fit_error_context_covers_type_errors_too():
+    # A boolean override goes through pandas' .mean(), which raises TypeError rather than
+    # ValueError, so the wrapper has to catch both to be useful.
+    df = pd.DataFrame({"notes": ["hello world", "foo bar", "baz qux"] * 10})
+
+    with pytest.raises(ValueError, match=r"could not fit column 'notes' as boolean"):
+        Profile.fit(df, column_types={"notes": ColumnType.BOOLEAN})
+
+
+def test_fit_still_succeeds_for_a_valid_override():
+    df = pd.DataFrame({"rating": [1, 2, 3, 4, 5] * 20})
+    profile = Profile.fit(df, column_types={"rating": ColumnType.DISCRETE})
+    assert profile.column_types["rating"] == "discrete"
+    assert len(profile.emit(n=10, seed=0)) == 10
