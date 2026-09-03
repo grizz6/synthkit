@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -120,6 +121,65 @@ def fit(
             typer.echo(f"self-check skipped: {e}", err=True)
 
 
+def _parse_key_pools(specs: list[str]) -> dict[str, list[Any]]:
+    """Parse repeated `--key-pool name=file:column` flags into emit()'s key_pools dict.
+
+    Split on the last colon rather than the first, so a Windows path like C:\\data\\x.csv:id
+    still resolves to the right file and column.
+    """
+    pools: dict[str, list[Any]] = {}
+
+    for spec in specs:
+        name, separator, source = spec.partition("=")
+        if not separator or not name:
+            raise typer.BadParameter(
+                f"expected NAME=FILE:COLUMN, got {spec!r} "
+                "(e.g. --key-pool customer_id=customers.parquet:id)"
+            )
+
+        path_text, colon, column = source.rpartition(":")
+        if not colon or not path_text or not column:
+            raise typer.BadParameter(f"expected FILE:COLUMN after '=', got {source!r} for {name!r}")
+
+        path = Path(path_text)
+        if not path.is_file():
+            # typer's exists=True only guards paths it parses itself, not one dug out of a
+            # NAME=FILE:COLUMN string, so this would otherwise be a bare FileNotFoundError.
+            raise typer.BadParameter(f"key pool file for {name!r} does not exist: {path_text}")
+
+        table = read_table(path)
+        if column not in table.columns:
+            available = ", ".join(map(str, table.columns))
+            raise typer.BadParameter(f"column {column!r} not in {path_text} (has: {available})")
+
+        values = table[column].dropna().unique().tolist()
+        if not values:
+            raise typer.BadParameter(f"key pool {name!r} is empty: {path_text}:{column}")
+        pools[name] = values
+
+    return pools
+
+
+def _warn_about_unsatisfied_foreign_keys(profile: Profile, key_pools: dict[str, list[Any]]) -> None:
+    """A foreign_key constraint with no pool to draw from leaves its column untouched.
+
+    That is silent otherwise: the constraint is declared, stored in the profile, and applied,
+    but the repair engine has nothing to sample and returns the column unchanged, so the
+    caller gets output that looks fine and quietly ignores a rule they declared.
+    """
+    unsatisfied = [
+        constraint["column"]
+        for constraint in profile.constraints
+        if constraint.get("type") == "foreign_key" and constraint["column"] not in key_pools
+    ]
+    if unsatisfied:
+        typer.echo(
+            f"warning: no --key-pool given for foreign_key column(s) {unsatisfied}; "
+            "they are emitted unchanged",
+            err=True,
+        )
+
+
 @app.command()
 def emit(
     profile: Path = typer.Argument(
@@ -132,10 +192,21 @@ def emit(
     n: int = typer.Option(..., "-n", help="Number of synthetic rows to generate."),
     seed: int = typer.Option(..., "--seed", help="Random seed; same seed always emits same rows."),
     output: Path = typer.Option(..., "-o", "--output", help="Where to write the synthetic table."),
+    key_pool: list[str] = typer.Option(
+        [],
+        "--key-pool",
+        help=(
+            "Values a foreign_key column may take, as NAME=FILE:COLUMN "
+            "(e.g. customer_id=customers.parquet:id). Repeatable."
+        ),
+    ),
 ) -> None:
     """Emit synthetic rows from a committed profile. Never touches real data."""
     profile_obj = Profile.load(profile)
-    synthetic = profile_obj.emit(n=n, seed=seed)
+    key_pools = _parse_key_pools(key_pool)
+    _warn_about_unsatisfied_foreign_keys(profile_obj, key_pools)
+
+    synthetic = profile_obj.emit(n=n, seed=seed, key_pools=key_pools)
     write_table(synthetic, output)
     typer.echo(f"wrote {n} synthetic rows -> {output}")
 
