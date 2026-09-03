@@ -724,3 +724,56 @@ def test_emit_key_pool_rejects_a_column_not_in_the_pool_file(tmp_path):
     )
     assert result.exit_code != 0
     assert "not in" in result.output
+
+
+def test_emit_key_pool_rejects_a_spec_missing_its_column(tmp_path):
+    # "name=file" parses past the NAME= check but has no ":column" half.
+    profile_path = _fit_profile_with_foreign_key(tmp_path)
+    customers_path = tmp_path / "customers.csv"
+    pd.DataFrame({"id": [1, 2]}).to_csv(customers_path, index=False)
+
+    result = runner.invoke(
+        app,
+        [
+            "emit",
+            str(profile_path),
+            "-n",
+            "5",
+            "--seed",
+            "0",
+            "-o",
+            str(tmp_path / "out.csv"),
+            "--key-pool",
+            f"customer_id={customers_path}",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "expected FILE:COLUMN" in result.output
+
+
+def test_emit_key_pool_rejects_an_all_null_pool_column(tmp_path):
+    # The file and column both exist, but every value is null, so there is nothing to sample.
+    # Left unchecked this would reach numpy's rng.choice with an empty pool.
+    profile_path = _fit_profile_with_foreign_key(tmp_path)
+    customers_path = tmp_path / "customers.csv"
+    pd.DataFrame({"id": [None, None, None]}).to_csv(customers_path, index=False)
+
+    result = runner.invoke(
+        app,
+        [
+            "emit",
+            str(profile_path),
+            "-n",
+            "5",
+            "--seed",
+            "0",
+            "-o",
+            str(tmp_path / "out.csv"),
+            "--key-pool",
+            f"customer_id={customers_path}:id",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "is empty" in result.output
