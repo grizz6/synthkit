@@ -91,6 +91,10 @@ synthkit inspect profiles/customers.json --json | jq '.column_summaries[] | sele
 
 # gate a build: fail if a fresh fit no longer matches the committed profile
 synthkit compare profiles/customers.json profiles/customers.new.json --fail-on-change
+
+# a foreign_key constraint needs real keys to point at; give it a pool to draw from
+synthkit emit profiles/orders.json -n 10000 --seed 42 -o fixtures/orders.parquet \
+    --key-pool customer_id=fixtures/customers.parquet:id
 ```
 
 ```python
