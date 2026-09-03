@@ -149,7 +149,14 @@ class Profile:
 
             ctype = types[col]
             marginal_class = TYPE_TO_MARGINAL_CLASS[ctype]
-            marginals[col] = marginal_class.fit(df[col]).to_dict()
+            try:
+                marginals[col] = marginal_class.fit(df[col]).to_dict()
+            except (ValueError, TypeError) as e:
+                # Fitting the wrong marginal for a column's actual values fails deep inside
+                # pandas or numpy, naming neither the column nor the type that was asked for.
+                # That is easy to hit via an explicit column_types override (or the CLI's
+                # --column-type), where the type is the caller's choice rather than inferred.
+                raise ValueError(f"could not fit column {col!r} as {ctype.value}: {e}") from e
             stored_types[col] = ctype.value
 
         null_columns = [c for c in columns if df[c].isnull().any()]
