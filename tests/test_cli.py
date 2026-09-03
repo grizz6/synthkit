@@ -594,3 +594,133 @@ def test_compare_json_and_fail_on_change_combine(tmp_path):
 
     assert result.exit_code == 1
     assert json.loads(result.output)["changed"]
+
+
+def _fit_profile_with_foreign_key(tmp_path):
+    data_path = tmp_path / "orders.csv"
+    pd.DataFrame(
+        {"customer_id": [7] * 200, "amount": np.random.default_rng(0).normal(50, 10, 200)}
+    ).to_csv(data_path, index=False)
+
+    constraints_path = tmp_path / "constraints.yaml"
+    constraints_path.write_text(
+        "constraints:\n"
+        "  - type: foreign_key\n"
+        "    column: customer_id\n"
+        "    references: customers.id\n"
+    )
+
+    profile_path = tmp_path / "profile.json"
+    runner.invoke(
+        app,
+        ["fit", str(data_path), "-o", str(profile_path), "--constraints", str(constraints_path)],
+    )
+    return profile_path
+
+
+def test_emit_key_pool_draws_foreign_key_values_from_the_pool(tmp_path):
+    # A foreign_key constraint was declarable in YAML but inert through the CLI: emit() takes
+    # key_pools, the CLI never passed any, so the repair engine had nothing to sample and left
+    # the column exactly as generated.
+    profile_path = _fit_profile_with_foreign_key(tmp_path)
+    customers_path = tmp_path / "customers.csv"
+    pd.DataFrame({"id": [101, 102, 103], "name": list("abc")}).to_csv(customers_path, index=False)
+
+    output_path = tmp_path / "out.csv"
+    result = runner.invoke(
+        app,
+        [
+            "emit",
+            str(profile_path),
+            "-n",
+            "50",
+            "--seed",
+            "0",
+            "-o",
+            str(output_path),
+            "--key-pool",
+            f"customer_id={customers_path}:id",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    emitted = set(pd.read_csv(output_path)["customer_id"])
+    assert emitted.issubset({101, 102, 103})
+    assert emitted != {7}
+
+
+def test_emit_warns_when_a_foreign_key_has_no_pool(tmp_path):
+    profile_path = _fit_profile_with_foreign_key(tmp_path)
+    result = runner.invoke(
+        app,
+        ["emit", str(profile_path), "-n", "5", "--seed", "0", "-o", str(tmp_path / "out.csv")],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "no --key-pool given for foreign_key column(s)" in result.output
+
+
+def test_emit_key_pool_rejects_a_malformed_spec(tmp_path):
+    profile_path = _fit_profile_with_foreign_key(tmp_path)
+    result = runner.invoke(
+        app,
+        [
+            "emit",
+            str(profile_path),
+            "-n",
+            "5",
+            "--seed",
+            "0",
+            "-o",
+            str(tmp_path / "out.csv"),
+            "--key-pool",
+            "customer_id",
+        ],
+    )
+    assert result.exit_code != 0
+    assert "NAME=FILE:COLUMN" in result.output
+
+
+def test_emit_key_pool_rejects_a_missing_file(tmp_path):
+    profile_path = _fit_profile_with_foreign_key(tmp_path)
+    result = runner.invoke(
+        app,
+        [
+            "emit",
+            str(profile_path),
+            "-n",
+            "5",
+            "--seed",
+            "0",
+            "-o",
+            str(tmp_path / "out.csv"),
+            "--key-pool",
+            f"customer_id={tmp_path / 'nope.csv'}:id",
+        ],
+    )
+    assert result.exit_code != 0
+    assert "does not exist" in result.output
+
+
+def test_emit_key_pool_rejects_a_column_not_in_the_pool_file(tmp_path):
+    profile_path = _fit_profile_with_foreign_key(tmp_path)
+    customers_path = tmp_path / "customers.csv"
+    pd.DataFrame({"id": [1, 2]}).to_csv(customers_path, index=False)
+
+    result = runner.invoke(
+        app,
+        [
+            "emit",
+            str(profile_path),
+            "-n",
+            "5",
+            "--seed",
+            "0",
+            "-o",
+            str(tmp_path / "out.csv"),
+            "--key-pool",
+            f"customer_id={customers_path}:nope",
+        ],
+    )
+    assert result.exit_code != 0
+    assert "not in" in result.output
