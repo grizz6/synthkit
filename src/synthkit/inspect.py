@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import pandas as pd
+
 from synthkit.constraints import describe_constraint, parse_constraints
 from synthkit.marginals import (
     BooleanMarginal,
@@ -20,6 +22,12 @@ from synthkit.marginals import (
     TextMarginal,
 )
 from synthkit.profile import ALL_NULL_KIND, MARGINAL_CLASS_BY_KIND, Profile
+
+_SECONDS_PER_DAY = 86400
+
+# Mirrors marginals.GRANULARITY_CANDIDATES_SECONDS; "86400s" is accurate but reads worse than
+# "daily" in a summary meant to be skimmed.
+_GRANULARITY_NAMES = {86400: "daily", 3600: "hourly", 60: "per-minute", 1: "per-second"}
 
 
 @dataclass
@@ -67,8 +75,18 @@ def _describe(marginal_dict: dict) -> str:
 
     if isinstance(marginal, DatetimeMarginal):
         low, high = marginal.numeric.quantile_values[0], marginal.numeric.quantile_values[-1]
-        granularity = marginal.granularity_seconds
-        return f"range [{int(low)}s, {int(high)}s] (epoch), granularity={granularity}s"
+        bounds = pd.to_datetime([int(low), int(high)], unit="s")
+        if marginal.timezone is not None:
+            bounds = bounds.tz_localize("UTC").tz_convert(marginal.timezone)
+
+        # Time-of-day is noise for daily-or-coarser data, which is most date columns.
+        daily_or_coarser = marginal.granularity_seconds >= _SECONDS_PER_DAY
+        fmt = "%Y-%m-%d" if daily_or_coarser else "%Y-%m-%d %H:%M:%S"
+        zone = f" {marginal.timezone}" if marginal.timezone else ""
+        granularity = _GRANULARITY_NAMES.get(
+            marginal.granularity_seconds, f"{marginal.granularity_seconds}s"
+        )
+        return f"range [{bounds[0].strftime(fmt)}, {bounds[1].strftime(fmt)}]{zone}, {granularity}"
 
     if isinstance(marginal, IdentifierMarginal):
         return f"{marginal.style} (regenerated, never modeled statistically)"
