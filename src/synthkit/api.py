@@ -71,6 +71,7 @@ class CheckReport:
     rare_combination_leaks: int
     passed: bool
     ks_by_column: dict[str, float]
+    identifying_matches: int = 0
 
 
 def check(
@@ -97,4 +98,5 @@ def check(
         rare_combination_leaks=privacy_report.rare_combination_leaks,
         passed=privacy_report.passed,
         ks_by_column=ks_by_column,
+        identifying_matches=privacy_report.identifying_matches,
     )

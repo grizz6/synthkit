@@ -150,7 +150,19 @@ def distance_to_closest_record(
     return result
 
 
-def count_exact_matches(synthetic: pd.DataFrame, real: pd.DataFrame) -> int:
+def count_exact_matches(
+    synthetic: pd.DataFrame, real: pd.DataFrame, columns: list[str] | None = None
+) -> int:
+    """Synthetic rows reproducing a real row across `columns` (every shared column by default).
+
+    Restricting the comparison matters because a column that is regenerated rather than
+    modeled -- an identifier -- can never match by construction, and including one only ever
+    hides matches in the columns that carry the actual content. See check(), which excludes
+    identifiers for exactly that reason.
+    """
+    if columns is not None:
+        synthetic, real = synthetic[columns], real[columns]
+
     real_rows = set(map(tuple, real.astype(str).to_numpy()))
     synthetic_rows = map(tuple, synthetic.astype(str).to_numpy())
     return sum(1 for row in synthetic_rows if row in real_rows)
@@ -184,12 +196,37 @@ def count_rare_combination_leaks(
     return int(_rare_combination_leak_mask(synthetic, real, columns, threshold).sum())
 
 
+def count_identifying_matches(
+    synthetic: pd.DataFrame,
+    real: pd.DataFrame,
+    columns: list[str],
+    threshold: int = DEFAULT_RARE_COMBINATION_THRESHOLD,
+) -> int:
+    """Exact matches that could actually single someone out.
+
+    A raw match count is not a privacy signal on its own. With two binary columns over a
+    thousand rows there are four possible records, so every synthetic row necessarily
+    reproduces a real one and a raw count reads 100% leakage where no one can be identified at
+    all. What matters is whether the reproduced record was rare in the real data: matching a
+    combination shared by hundreds of people reveals nothing, matching one held by two people
+    narrows them to two.
+    """
+    if not columns:
+        return 0
+
+    real_counts = real[columns].astype(str).value_counts()
+    rare_rows = {row for row, count in real_counts.items() if count < threshold}
+    synthetic_rows = map(tuple, synthetic[columns].astype(str).to_numpy())
+    return sum(1 for row in synthetic_rows if row in rare_rows)
+
+
 @dataclass
 class PrivacyReport:
     dcr_ratio: float
     exact_matches: int
     rare_combination_leaks: int
     passed: bool
+    identifying_matches: int = 0
 
 
 def check(
@@ -230,7 +267,20 @@ def check(
     else:
         ratio = float(synthetic_p / (holdout_p or 1e-9))
 
-    exact_matches = count_exact_matches(synthetic, real)
+    # Identifiers are regenerated from a detected format, never modeled from real values, so
+    # they cannot match and their presence in a whole-row comparison only masks matches
+    # elsewhere. Confirmed directly: a synthetic frame copying every sensitive column verbatim
+    # from real rows reported exact_matches=0 and passed, purely because its id column
+    # differed. Re-identification runs on the quasi-identifiers, not the surrogate key.
+    content_columns = [
+        column
+        for column in synthetic.columns
+        if column in real.columns and column_types.get(str(column)) != "identifier"
+    ]
+    exact_matches = count_exact_matches(synthetic, real, content_columns or None)
+    identifying_matches = count_identifying_matches(
+        synthetic, real, content_columns, rare_combination_threshold
+    )
 
     categorical_columns = [
         c for c, t in column_types.items() if t in ("categorical", "boolean") and c in real.columns
@@ -249,5 +299,9 @@ def check(
         dcr_ratio=ratio,
         exact_matches=exact_matches,
         rare_combination_leaks=rare_leaks,
-        passed=ratio >= min_dcr_ratio and exact_matches == 0 and rare_leaks == 0,
+        # Gated on identifying matches rather than the raw count: on a low-entropy dataset
+        # every synthetic row necessarily reproduces some real one, and failing on that would
+        # reject correct output for having too few possible records to be identifying.
+        passed=ratio >= min_dcr_ratio and identifying_matches == 0 and rare_leaks == 0,
+        identifying_matches=identifying_matches,
     )
