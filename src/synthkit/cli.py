@@ -264,6 +264,9 @@ def check(
 
     typer.echo(f"dcr_ratio: {report.dcr_ratio:.3f} (min {min_dcr_ratio})")
     typer.echo(f"exact_matches: {report.exact_matches}")
+    # The verdict turns on this one, not the raw count above: on a low-entropy dataset every
+    # synthetic row necessarily reproduces some real one without identifying anybody.
+    typer.echo(f"identifying_matches: {report.identifying_matches}")
     typer.echo(f"rare_combination_leaks: {report.rare_combination_leaks}")
 
     if not report.passed:
