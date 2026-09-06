@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -110,3 +111,45 @@ def test_csv_leaves_mixed_offset_timestamps_as_text_rather_than_failing(tmp_path
     restored = read_table(path)
     assert not pd.api.types.is_datetime64_any_dtype(restored["created_at"])
     assert len(restored) == 2
+
+
+def test_timezone_survives_the_whole_csv_fit_emit_csv_loop(tmp_path):
+    # Spans three modules that each handle the zone separately: io detects it in text, the
+    # datetime marginal records it, and emit rebuilds the column from it. Each has its own
+    # unit tests; this is the loop a user actually runs, where a drop at any step would mean
+    # fixtures whose dtype no longer matches the real data they stand in for.
+    from synthkit.profile import Profile
+
+    rng = np.random.default_rng(0)
+    dates = pd.to_datetime("2022-01-01T00:00:00+00:00") + pd.to_timedelta(
+        rng.integers(0, 900, 300), unit="D"
+    )
+    real = pd.DataFrame({"created_at": dates, "amount": rng.normal(50, 10, 300)})
+
+    real_path = tmp_path / "real.csv"
+    write_table(real, real_path)
+    loaded = read_table(real_path)
+    assert str(loaded["created_at"].dt.tz) == "UTC"
+
+    synthetic = Profile.fit(loaded).emit(n=20, seed=0)
+    assert str(synthetic["created_at"].dt.tz) == "UTC"
+
+    synthetic_path = tmp_path / "synthetic.csv"
+    write_table(synthetic, synthetic_path)
+    assert str(read_table(synthetic_path)["created_at"].dt.tz) == "UTC"
+
+
+def test_fixed_utc_offset_in_csv_is_preserved_not_normalized_to_utc(tmp_path):
+    # A database export often carries a fixed offset rather than a named zone; it must come
+    # back as that offset, not silently rewritten to UTC.
+    from synthkit.profile import Profile
+
+    path = tmp_path / "x.csv"
+    rows = "\n".join(f"2024-01-{day:02d}T00:00:00-05:00" for day in range(1, 29))
+    path.write_text("t\n" + rows + "\n")
+
+    loaded = read_table(path)
+    assert str(loaded["t"].dt.tz) == "UTC-05:00"
+
+    emitted = Profile.fit(loaded).emit(n=5, seed=0)
+    assert str(emitted["t"].dt.tz) == "UTC-05:00"
