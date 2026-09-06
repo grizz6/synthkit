@@ -301,9 +301,21 @@ def diff(
         flag = " DRIFTED" if column in report.drifted_columns else ""
         typer.echo(f"{column}: {score:.3f}{flag}")
 
+    if report.missing_columns:
+        typer.echo(f"MISSING from the data: {', '.join(report.missing_columns)}")
+    if report.new_columns:
+        typer.echo(f"NEW in the data: {', '.join(report.new_columns)}")
+
     if not report.passed:
-        count = len(report.drifted_columns)
-        typer.echo(f"FAILED: {count} column(s) drifted past {threshold}", err=True)
+        reasons = []
+        if report.drifted_columns:
+            reasons.append(f"{len(report.drifted_columns)} column(s) drifted past {threshold}")
+        if report.schema_changed:
+            reasons.append(
+                f"schema changed ({len(report.missing_columns)} missing, "
+                f"{len(report.new_columns)} new)"
+            )
+        typer.echo(f"FAILED: {'; '.join(reasons)}", err=True)
         raise typer.Exit(code=1)
 
     typer.echo("PASSED: no drift detected")

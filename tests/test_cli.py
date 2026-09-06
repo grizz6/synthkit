@@ -874,3 +874,45 @@ def test_cli_inspect_shows_dates_and_timezone_for_a_datetime_column(tmp_path):
     assert "UTC" in result.output
     assert "daily" in result.output
     assert "epoch" not in result.output  # the old unreadable rendering is gone
+
+
+def test_diff_fails_and_exits_nonzero_when_the_schema_changed(tmp_path):
+    # The CI-gate shape of the bug: this used to print PASSED and exit 0 while the committed
+    # profile no longer described production at all.
+    rng = np.random.default_rng(0)
+    n = 400
+    data_path = tmp_path / "data.csv"
+    pd.DataFrame({"age": rng.normal(40, 10, n), "income": rng.normal(50000, 1000, n)}).to_csv(
+        data_path, index=False
+    )
+    profile_path = tmp_path / "profile.json"
+    runner.invoke(app, ["fit", str(data_path), "-o", str(profile_path)])
+
+    changed_path = tmp_path / "changed.csv"
+    pd.DataFrame({"age": rng.normal(40, 10, n), "tenure": rng.normal(5, 2, n)}).to_csv(
+        changed_path, index=False
+    )
+
+    result = runner.invoke(app, ["diff", str(profile_path), str(changed_path)])
+
+    assert result.exit_code == 1
+    assert "MISSING from the data: income" in result.output
+    assert "NEW in the data: tenure" in result.output
+    assert "schema changed" in result.output
+
+
+def test_diff_still_passes_when_only_the_schema_is_unchanged(tmp_path):
+    rng = np.random.default_rng(0)
+    n = 400
+    frame = pd.DataFrame({"age": rng.normal(40, 10, n), "score": rng.normal(10, 2, n)})
+    data_path = tmp_path / "data.csv"
+    frame.to_csv(data_path, index=False)
+    profile_path = tmp_path / "profile.json"
+    runner.invoke(app, ["fit", str(data_path), "-o", str(profile_path)])
+
+    result = runner.invoke(app, ["diff", str(profile_path), str(data_path)])
+
+    assert result.exit_code == 0, result.output
+    assert "PASSED" in result.output
+    assert "MISSING" not in result.output
+    assert "NEW in the data" not in result.output
