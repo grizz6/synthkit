@@ -226,6 +226,11 @@ class Profile:
     ) -> pd.DataFrame:
         if n < 0:
             raise ValueError(f"n must be non-negative, got {n}")
+        if seed < 0:
+            # numpy rejects this too, but as a bare "expected non-negative integer" that names
+            # neither the parameter nor the call it came from, which is unhelpful next to an
+            # `n` that is also an integer.
+            raise ValueError(f"seed must be non-negative, got {seed}")
 
         rng = np.random.default_rng(seed)
         result: dict[str, np.ndarray] = {}
