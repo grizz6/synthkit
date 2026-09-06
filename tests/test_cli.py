@@ -833,3 +833,44 @@ def test_compare_surfaces_a_constraint_change_the_count_alone_would_hide(tmp_pat
     assert "constraint removed: inequality: created_at <= updated_at" in result.output
     assert "constraint added:   inequality: created_at < updated_at" in result.output
     assert "no column-level changes" not in result.output
+
+
+def _write_tz_csv(path, n=300):
+    rng = np.random.default_rng(0)
+    dates = pd.to_datetime("2022-01-01T00:00:00+00:00") + pd.to_timedelta(
+        rng.integers(0, 900, n), unit="D"
+    )
+    pd.DataFrame({"created_at": dates, "amount": rng.normal(50, 10, n)}).to_csv(path, index=False)
+
+
+def test_cli_fit_emit_preserves_timezone_in_the_written_fixture(tmp_path):
+    data_path = tmp_path / "data.csv"
+    _write_tz_csv(data_path)
+    profile_path = tmp_path / "profile.json"
+
+    assert runner.invoke(app, ["fit", str(data_path), "-o", str(profile_path)]).exit_code == 0
+
+    output_path = tmp_path / "synthetic.csv"
+    result = runner.invoke(
+        app, ["emit", str(profile_path), "-n", "40", "--seed", "0", "-o", str(output_path)]
+    )
+    assert result.exit_code == 0, result.output
+
+    # Read back the way a consumer would, and require the offset to have made it to disk.
+    written = output_path.read_text().splitlines()[1]
+    assert "+00:00" in written
+
+
+def test_cli_inspect_shows_dates_and_timezone_for_a_datetime_column(tmp_path):
+    data_path = tmp_path / "data.csv"
+    _write_tz_csv(data_path)
+    profile_path = tmp_path / "profile.json"
+    runner.invoke(app, ["fit", str(data_path), "-o", str(profile_path)])
+
+    result = runner.invoke(app, ["inspect", str(profile_path)])
+
+    assert result.exit_code == 0, result.output
+    assert "datetime" in result.output
+    assert "UTC" in result.output
+    assert "daily" in result.output
+    assert "epoch" not in result.output  # the old unreadable rendering is gone
