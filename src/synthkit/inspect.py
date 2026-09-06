@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from synthkit.constraints import describe_constraint, parse_constraints
 from synthkit.marginals import (
     BooleanMarginal,
     CategoricalMarginal,
@@ -108,10 +109,18 @@ class ProfileComparison:
     unchanged: list[str]
     rows_fit: tuple[int, int]
     constraint_counts: tuple[int, int]
+    constraints_added: list[str]
+    constraints_removed: list[str]
 
     @property
     def any_changes(self) -> bool:
-        return bool(self.added or self.removed or self.changed)
+        return bool(
+            self.added
+            or self.removed
+            or self.changed
+            or self.constraints_added
+            or self.constraints_removed
+        )
 
 
 def _format_null_rate(rate: float | None) -> str:
@@ -160,6 +169,12 @@ def compare_profiles(old: Profile, new: Profile) -> ProfileComparison:
         else:
             unchanged.append(name)
 
+    # Compared as rendered rules, not by count: an operator or expression can change while
+    # the number of constraints stays identical (<= becoming <, say), which would otherwise
+    # show up as no change at all.
+    old_rules = [describe_constraint(c) for c in parse_constraints(old.constraints)]
+    new_rules = [describe_constraint(c) for c in parse_constraints(new.constraints)]
+
     return ProfileComparison(
         added=added,
         removed=removed,
@@ -167,4 +182,6 @@ def compare_profiles(old: Profile, new: Profile) -> ProfileComparison:
         unchanged=unchanged,
         rows_fit=(old.n_rows_fit, new.n_rows_fit),
         constraint_counts=(len(old.constraints), len(new.constraints)),
+        constraints_added=[r for r in new_rules if r not in old_rules],
+        constraints_removed=[r for r in old_rules if r not in new_rules],
     )
