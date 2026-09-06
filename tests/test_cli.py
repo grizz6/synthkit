@@ -947,3 +947,66 @@ def test_check_reports_identifying_matches_separately_from_raw_matches(tmp_path)
 
     assert "exact_matches:" in result.output
     assert "identifying_matches:" in result.output
+
+
+def _leaky_dataset(tmp_path):
+    rng = np.random.default_rng(1)
+    n = 400
+    frame = pd.DataFrame(
+        {
+            "segment": rng.choice(["a", "b"], size=n),
+            "zip": rng.choice([f"{z:05d}" for z in range(60)], size=n),
+            "age": rng.integers(18, 90, n),
+        }
+    )
+    data_path = tmp_path / "data.csv"
+    frame.to_csv(data_path, index=False)
+    profile_path = tmp_path / "profile.json"
+    runner.invoke(app, ["fit", str(data_path), "-o", str(profile_path)])
+    return data_path, profile_path
+
+
+def test_check_explain_attributes_risk_to_columns(tmp_path):
+    data_path, profile_path = _leaky_dataset(tmp_path)
+
+    result = runner.invoke(
+        app,
+        [
+            "check",
+            str(data_path),
+            "--profile",
+            str(profile_path),
+            "--real",
+            str(data_path),
+            "--min-dcr-ratio",
+            "0",
+            "--explain",
+        ],
+    )
+
+    assert "identifying matches remaining if each column were dropped" in result.output
+    assert "without age" in result.output
+    assert "without segment" in result.output
+    # Ordered by remaining count, so the column worth coarsening comes first.
+    assert result.output.index("without age") < result.output.index("without segment")
+
+
+def test_check_without_explain_stays_quiet_about_attribution(tmp_path):
+    data_path, profile_path = _leaky_dataset(tmp_path)
+
+    result = runner.invoke(
+        app,
+        [
+            "check",
+            str(data_path),
+            "--profile",
+            str(profile_path),
+            "--real",
+            str(data_path),
+            "--min-dcr-ratio",
+            "0",
+        ],
+    )
+
+    assert "identifying_matches:" in result.output
+    assert "remaining if each column were dropped" not in result.output

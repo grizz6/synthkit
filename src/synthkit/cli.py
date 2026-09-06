@@ -243,6 +243,11 @@ def check(
     rare_combination_threshold: int = typer.Option(
         DEFAULT_RARE_COMBINATION_THRESHOLD, "--rare-combination-threshold"
     ),
+    explain: bool = typer.Option(
+        False,
+        "--explain",
+        help="Attribute identifying matches to the columns driving them.",
+    ),
 ) -> None:
     """Verify synthetic fixtures against a privacy baseline. Exits non-zero on failure."""
     synthetic = read_table(fixtures)
@@ -268,6 +273,22 @@ def check(
     # synthetic row necessarily reproduces some real one without identifying anybody.
     typer.echo(f"identifying_matches: {report.identifying_matches}")
     typer.echo(f"rare_combination_leaks: {report.rare_combination_leaks}")
+
+    if explain and report.identifying_matches:
+        content_columns = [
+            column
+            for column in synthetic.columns
+            if column in real_df.columns
+            and profile_obj.column_types.get(str(column)) != "identifier"
+        ]
+        remaining = privacy.explain_identifying_matches(
+            synthetic, real_df, content_columns, rare_combination_threshold
+        )
+        typer.echo("\nidentifying matches remaining if each column were dropped:")
+        for column, count in sorted(remaining.items(), key=lambda kv: kv[1]):
+            removed = report.identifying_matches - count
+            typer.echo(f"  without {column}: {count} (removes {removed})")
+        typer.echo("coarsen the column at the top to reduce exposure the most.")
 
     if not report.passed:
         typer.echo("FAILED privacy check", err=True)
