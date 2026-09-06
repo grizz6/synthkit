@@ -120,3 +120,22 @@ def referenced_columns(constraint: Constraint) -> list[str]:
     if isinstance(constraint, Unique):
         return list(constraint.columns)
     return [constraint.column]
+
+
+def describe_constraint(constraint: Constraint) -> str:
+    """A constraint as one readable line, for summaries and comparisons.
+
+    Deliberately reconstructs the rule rather than dumping the dataclass: the point is that a
+    reader (or a reviewer looking at what changed between two profiles) can tell at a glance
+    what the rule actually says, including the operator and the expression, both of which can
+    change without the number of constraints changing at all.
+    """
+    if isinstance(constraint, Inequality):
+        return f"inequality: {constraint.left} {constraint.op} {constraint.right}"
+    if isinstance(constraint, Derived):
+        return f"derived: {constraint.column} = {constraint.expr}"
+    if isinstance(constraint, ConditionalNull):
+        return f"conditional_null: {constraint.column} is null when {constraint.null_when}"
+    if isinstance(constraint, Unique):
+        return f"unique: ({', '.join(constraint.columns)})"
+    return f"foreign_key: {constraint.column} -> {constraint.references}"
