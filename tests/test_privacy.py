@@ -7,6 +7,7 @@ from synthkit.privacy import (
     check,
     compute_value_ranges,
     count_exact_matches,
+    count_identifying_matches,
     count_rare_combination_leaks,
     distance_to_closest_record,
     gower_distance_matrix,
@@ -250,3 +251,85 @@ def test_check_handles_holdout_fraction_of_one():
     synthetic = pd.DataFrame({"a": rng.normal(0, 1, 50)})
     report = check(synthetic, real, {"a": "continuous"}, holdout_fraction=1.0)
     assert np.isfinite(report.dcr_ratio)
+
+
+def _identifier_dataset(n=400, seed=1):
+    rng = np.random.default_rng(seed)
+    return pd.DataFrame(
+        {
+            "user_id": [f"U{i:06d}" for i in range(n)],
+            "diagnosis": rng.choice(["A", "B", "C"], size=n),
+            "zip": rng.choice(["02139", "10001", "94103"], size=n),
+            "age": rng.integers(18, 90, n),
+        }
+    )
+
+
+_IDENTIFIER_TYPES = {
+    "user_id": "identifier",
+    "diagnosis": "categorical",
+    "zip": "categorical",
+    "age": "categorical",
+}
+
+
+def test_identifier_column_no_longer_masks_verbatim_leakage():
+    # Regression test, and the most serious one here: identifiers are regenerated from a
+    # detected format and can never match, so including them in a whole-row comparison could
+    # only ever hide matches in the columns that carry real content. Confirmed directly --
+    # a frame copying every sensitive column verbatim from real rows reported exact_matches=0
+    # and passed the privacy check outright, purely because its id column differed.
+    real = _identifier_dataset()
+    leaked = real.copy()
+    leaked["user_id"] = [f"X{i:06d}" for i in range(len(real))]
+
+    report = check(leaked, real, _IDENTIFIER_TYPES, min_dcr_ratio=1.0)
+    assert report.exact_matches == len(real)
+    assert report.identifying_matches == len(real)
+    assert not report.passed
+
+
+def test_a_low_entropy_dataset_is_not_reported_as_leaking():
+    # The other direction, and why a raw match count cannot drive the verdict: two binary
+    # columns over a thousand rows allow four distinct records, so every synthetic row
+    # necessarily reproduces a real one. That is arithmetic, not leakage -- no one can be
+    # singled out from a combination that hundreds of people share.
+    rng = np.random.default_rng(0)
+    n = 1000
+    real = pd.DataFrame(
+        {
+            "record_id": [f"R{i:06d}" for i in range(n)],
+            "segment": rng.choice(["a", "b"], size=n),
+            "flag": rng.choice(["y", "n"], size=n),
+        }
+    )
+    synthetic = real.copy()
+    synthetic["record_id"] = [f"Z{i:06d}" for i in range(n)]
+
+    types = {"record_id": "identifier", "segment": "categorical", "flag": "categorical"}
+    report = check(synthetic, real, types, min_dcr_ratio=0.0)
+
+    assert report.exact_matches == n  # every row matches, as it must
+    assert report.identifying_matches == 0  # but none of them identify anyone
+    assert report.passed
+
+
+def test_count_exact_matches_can_be_restricted_to_chosen_columns():
+    real = pd.DataFrame({"id": ["a", "b"], "v": [1, 2]})
+    synthetic = pd.DataFrame({"id": ["x", "y"], "v": [1, 2]})
+
+    assert count_exact_matches(synthetic, real) == 0  # ids differ, so no whole row matches
+    assert count_exact_matches(synthetic, real, ["v"]) == 2  # the content is identical
+
+
+def test_count_identifying_matches_only_counts_rare_records():
+    real = pd.DataFrame({"v": ["common"] * 100 + ["rare"]})
+    synthetic = pd.DataFrame({"v": ["common", "rare"]})
+
+    assert count_identifying_matches(synthetic, real, ["v"], threshold=5) == 1
+
+
+def test_count_identifying_matches_is_zero_without_columns_to_compare():
+    real = pd.DataFrame({"id": ["a", "b"]})
+    synthetic = pd.DataFrame({"id": ["a", "b"]})
+    assert count_identifying_matches(synthetic, real, [], threshold=5) == 0
