@@ -3,6 +3,7 @@ import re
 import numpy as np
 import pandas as pd
 
+from synthkit.constraints import Inequality
 from synthkit.inspect import compare_profiles, summarize_profile
 from synthkit.profile import Profile
 from synthkit.types import ColumnType
@@ -223,3 +224,53 @@ def test_compare_describes_a_column_that_stopped_being_all_null():
     assert "all_null -> continuous" in joined
     assert "null_rate" in joined
     assert "copula" in joined
+
+
+def make_two_column_df(n=300, seed=0):
+    rng = np.random.default_rng(seed)
+    return pd.DataFrame(
+        {"a": rng.integers(0, 100, n).astype(float), "b": rng.integers(0, 100, n).astype(float)}
+    )
+
+
+def test_compare_detects_a_changed_constraint_with_an_unchanged_count():
+    # Regression test: comparing only the NUMBER of constraints missed an operator or
+    # expression change entirely, so tightening <= to < reported "no changes" to a reviewer.
+    df = make_two_column_df()
+    old = Profile.fit(df, constraints=[Inequality("a", "<=", "b")])
+    new = Profile.fit(df, constraints=[Inequality("a", "<", "b")])
+
+    comparison = compare_profiles(old, new)
+    assert comparison.constraint_counts == (1, 1)  # the count alone is unchanged
+    assert comparison.any_changes
+    assert comparison.constraints_removed == ["inequality: a <= b"]
+    assert comparison.constraints_added == ["inequality: a < b"]
+
+
+def test_compare_detects_an_added_constraint():
+    df = make_two_column_df()
+    comparison = compare_profiles(
+        Profile.fit(df), Profile.fit(df, constraints=[Inequality("a", "<=", "b")])
+    )
+    assert comparison.constraints_added == ["inequality: a <= b"]
+    assert comparison.constraints_removed == []
+
+
+def test_compare_detects_a_removed_constraint():
+    df = make_two_column_df()
+    comparison = compare_profiles(
+        Profile.fit(df, constraints=[Inequality("a", "<=", "b")]), Profile.fit(df)
+    )
+    assert comparison.constraints_removed == ["inequality: a <= b"]
+    assert comparison.constraints_added == []
+
+
+def test_compare_reports_no_changes_when_constraints_are_identical():
+    df = make_two_column_df()
+    constraints = [Inequality("a", "<=", "b")]
+    comparison = compare_profiles(
+        Profile.fit(df, constraints=constraints), Profile.fit(df, constraints=constraints)
+    )
+    assert not comparison.any_changes
+    assert comparison.constraints_added == []
+    assert comparison.constraints_removed == []
