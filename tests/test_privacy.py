@@ -10,6 +10,7 @@ from synthkit.privacy import (
     count_identifying_matches,
     count_rare_combination_leaks,
     distance_to_closest_record,
+    explain_identifying_matches,
     gower_distance_matrix,
 )
 
@@ -333,3 +334,37 @@ def test_count_identifying_matches_is_zero_without_columns_to_compare():
     real = pd.DataFrame({"id": ["a", "b"]})
     synthetic = pd.DataFrame({"id": ["a", "b"]})
     assert count_identifying_matches(synthetic, real, [], threshold=5) == 0
+
+
+def test_explain_attributes_risk_to_the_column_driving_it():
+    # A leave-one-out count is only useful if it separates the column making records unique
+    # from one that merely looks sensitive: dropping a coarse column should change nothing.
+    rng = np.random.default_rng(1)
+    n = 400
+    real = pd.DataFrame(
+        {
+            "segment": rng.choice(["a", "b"], size=n),  # coarse: two values over 400 rows
+            "zip": rng.choice([f"{z:05d}" for z in range(60)], size=n),
+            "age": rng.integers(18, 90, n),  # highest cardinality of the three
+        }
+    )
+    columns = list(real.columns)
+    baseline = count_identifying_matches(real, real, columns)
+    remaining = explain_identifying_matches(real, real, columns)
+
+    assert baseline > 0
+    assert remaining["segment"] == baseline  # dropping it exposes exactly as many people
+    assert remaining["age"] < baseline  # dropping it genuinely reduces the risk
+    assert remaining["age"] < remaining["segment"]
+
+
+def test_explain_covers_every_column_it_was_given():
+    real = pd.DataFrame({"a": ["x", "y"], "b": ["p", "q"]})
+    assert set(explain_identifying_matches(real, real, ["a", "b"])) == {"a", "b"}
+
+
+def test_explain_on_a_single_column_reports_the_count_with_nothing_left():
+    # Dropping the only column leaves no columns to compare, which is zero matches by
+    # definition rather than an error.
+    real = pd.DataFrame({"a": ["x", "y", "z"]})
+    assert explain_identifying_matches(real, real, ["a"]) == {"a": 0}
