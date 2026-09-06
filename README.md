@@ -75,6 +75,7 @@ synthkit emit profiles/customers.json -n 10000 --seed 42 -o fixtures/customers.p
 synthkit check fixtures/customers.parquet --profile profiles/customers.json --real data/customers.parquet
 
 # has production drifted away from the profile your fixtures are built on?
+# fails on a shifted distribution or a changed schema (a column added or dropped)
 synthkit diff profiles/customers.json data/customers_2026Q3.parquet
 
 # what's actually in a committed profile, without writing code to find out
@@ -116,7 +117,10 @@ def test_billing_rollup(synth_frame):
    foreign keys) are declared separately and enforced after sampling
    (`src/synthkit/constraints.py`, `src/synthkit/repair.py`).
 5. A **privacy check** compares distance-to-closest-record against a real holdout baseline,
-   so "no real records" is measured rather than assumed (`src/synthkit/privacy.py`).
+   so "no real records" is measured rather than assumed. Identifier columns are excluded from
+   match detection (they are regenerated, so they can never match and would only mask
+   matches elsewhere), and a reproduced record counts against you only when it was rare
+   enough in the real data to narrow someone down (`src/synthkit/privacy.py`).
 
 ## Known limitations
 
