@@ -58,7 +58,7 @@ def test_datetime_column_reports_range_and_granularity():
     profile = Profile.fit(pd.DataFrame({"signup_at": dates}))
     summary = summarize_profile(profile)[0]
     assert summary.type == "datetime"
-    assert "granularity=86400s" in summary.detail
+    assert "daily" in summary.detail
 
 
 def test_identifier_column_reports_its_style():
@@ -274,3 +274,53 @@ def test_compare_reports_no_changes_when_constraints_are_identical():
     assert not comparison.any_changes
     assert comparison.constraints_added == []
     assert comparison.constraints_removed == []
+
+
+def test_datetime_summary_shows_real_dates_not_epoch_seconds():
+    # inspect exists to be read at a glance; "range [1704034800s, 1721228400s] (epoch)" is
+    # accurate and useless for that.
+    dates = pd.date_range("2024-01-01", periods=200, freq="D")
+    detail = summarize_profile(Profile.fit(pd.DataFrame({"t": dates})))[0].detail
+    assert "2024-01-01" in detail
+    assert "epoch" not in detail
+    assert "s," not in detail  # no raw second counts
+
+
+def test_datetime_summary_names_the_granularity():
+    daily = pd.date_range("2024-01-01", periods=200, freq="D")
+    per_second = pd.date_range("2024-01-01", periods=200, freq="s")
+
+    assert "daily" in summarize_profile(Profile.fit(pd.DataFrame({"t": daily})))[0].detail
+    assert "per-second" in summarize_profile(Profile.fit(pd.DataFrame({"t": per_second})))[0].detail
+
+
+def test_datetime_summary_shows_the_timezone_when_there_is_one():
+    aware = pd.date_range("2024-01-01", periods=200, freq="D", tz="Asia/Tokyo")
+    naive = pd.date_range("2024-01-01", periods=200, freq="D")
+
+    aware_detail = summarize_profile(Profile.fit(pd.DataFrame({"t": aware})))[0].detail
+    naive_detail = summarize_profile(Profile.fit(pd.DataFrame({"t": naive})))[0].detail
+
+    assert "Asia/Tokyo" in aware_detail
+    assert "Asia/Tokyo" not in naive_detail
+    # The two must not read identically: they produce fixtures of different dtypes.
+    assert aware_detail != naive_detail
+
+
+def test_datetime_summary_omits_time_of_day_for_daily_data_but_keeps_it_otherwise():
+    daily = pd.date_range("2024-01-01", periods=200, freq="D")
+    hourly = pd.date_range("2024-01-01", periods=200, freq="h")
+
+    assert "00:00:00" not in summarize_profile(Profile.fit(pd.DataFrame({"t": daily})))[0].detail
+    assert "00:00:00" in summarize_profile(Profile.fit(pd.DataFrame({"t": hourly})))[0].detail
+
+
+def test_compare_notices_a_timezone_change_on_a_datetime_column():
+    naive = pd.date_range("2024-01-01", periods=200, freq="D")
+    aware = pd.date_range("2024-01-01", periods=200, freq="D", tz="UTC")
+
+    comparison = compare_profiles(
+        Profile.fit(pd.DataFrame({"t": naive})), Profile.fit(pd.DataFrame({"t": aware}))
+    )
+    assert comparison.any_changes
+    assert any("UTC" in change for change in comparison.changed[0].changes)
