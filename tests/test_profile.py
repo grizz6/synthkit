@@ -439,3 +439,33 @@ def test_constant_datetime_column_emits_without_crashing():
     df = pd.DataFrame({"d": pd.to_datetime(["2024-01-01"] * 50)})
     synthetic = Profile.fit(df).emit(n=5, seed=0)
     assert len(synthetic) == 5
+
+
+def test_timezone_aware_column_behaves_the_same_in_real_and_synthetic_data():
+    # The user-facing shape of the bug: code that works against the real column raised
+    # TypeError against the fixture, because the fixture came back tz-naive. A fixture that
+    # crashes code the real data supports is the failure this package exists to prevent.
+    rng = np.random.default_rng(0)
+    real = pd.DataFrame(
+        {
+            "created_at": pd.to_datetime("2022-01-01T00:00:00+00:00")
+            + pd.to_timedelta(rng.integers(0, 900, 200), unit="D")
+        }
+    )
+    synthetic = Profile.fit(real).emit(n=50, seed=0)
+
+    def local_hour(df):
+        return df["created_at"].dt.tz_convert("US/Eastern").dt.hour
+
+    assert len(local_hour(real)) == 200
+    assert len(local_hour(synthetic)) == 50  # must not raise
+
+
+def test_timezone_survives_profile_save_and_load(tmp_path):
+    dates = pd.date_range("2024-01-01", periods=200, freq="D", tz="Asia/Tokyo")
+    profile = Profile.fit(pd.DataFrame({"t": dates}))
+    path = tmp_path / "profile.json"
+    profile.save(path)
+
+    emitted = Profile.load(path).emit(n=10, seed=0)
+    assert str(emitted["t"].dt.tz) == "Asia/Tokyo"
