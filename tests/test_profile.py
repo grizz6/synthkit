@@ -1,4 +1,6 @@
 import json
+import tempfile
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -6,6 +8,7 @@ import pytest
 from scipy.stats import ks_2samp
 
 from synthkit.constraints import ConditionalNull, ForeignKey, Inequality, Unique
+from synthkit.inspect import compare_profiles
 from synthkit.profile import Profile, _pseudo_uniform
 from synthkit.types import ColumnType
 
@@ -365,3 +368,74 @@ def test_fit_still_succeeds_for_a_valid_override():
     profile = Profile.fit(df, column_types={"rating": ColumnType.DISCRETE})
     assert profile.column_types["rating"] == "discrete"
     assert len(profile.emit(n=10, seed=0)) == 10
+
+
+def test_emit_rejects_a_negative_seed_naming_the_parameter():
+    # numpy rejects a negative seed on its own, but as a bare "expected non-negative integer"
+    # that names neither the parameter nor synthkit, which reads badly next to emit()'s other
+    # integer parameter.
+    profile = Profile.fit(pd.DataFrame({"a": np.random.default_rng(0).normal(0, 1, 50)}))
+    with pytest.raises(ValueError, match="seed must be non-negative"):
+        profile.emit(n=5, seed=-7)
+
+
+def test_save_load_round_trip_is_semantically_identical():
+    # Stronger than comparing emitted frames: nothing about the profile's own described shape
+    # (types, ranges, null rates, copula membership, constraints) may shift crossing JSON.
+    rng = np.random.default_rng(0)
+    n = 400
+    df = pd.DataFrame(
+        {
+            "age": rng.normal(40, 12, n),
+            "tier": rng.choice(["free", "pro"], size=n),
+            "when": pd.to_datetime("2022-01-01") + pd.to_timedelta(rng.integers(0, 900, n), "D"),
+            "flag": rng.random(n) < 0.7,
+        }
+    )
+    profile = Profile.fit(df, constraints=[Inequality("age", "<=", "age")])
+
+    path = Path(tempfile.mkdtemp()) / "profile.json"
+    profile.save(path)
+
+    assert not compare_profiles(profile, Profile.load(path)).any_changes
+
+
+def test_unicode_column_names_and_values_survive_fit_and_emit():
+    rng = np.random.default_rng(0)
+    n = 200
+    df = pd.DataFrame(
+        {
+            "año": rng.normal(40, 12, n),
+            "ciudad": rng.choice(["México", "São Paulo", "東京"], size=n),
+            "emoji": rng.choice(["🎉", "🚀"], size=n),
+        }
+    )
+    synthetic = Profile.fit(df).emit(n=50, seed=0)
+
+    assert list(synthetic.columns) == ["año", "ciudad", "emoji"]
+    assert set(synthetic["ciudad"]) <= {"México", "São Paulo", "東京"}
+    assert set(synthetic["emoji"]) <= {"🎉", "🚀"}
+
+
+def test_large_finite_values_do_not_overflow_to_infinity_on_emit():
+    # The quantile-knot round trip runs values through interpolation and JSON rounding; near
+    # the top of float64's range that is where an overflow to inf would show up.
+    values = np.random.default_rng(0).normal(0, 1, 200) * 1e100
+    assert np.isfinite(values).all()  # sanity: the input itself has not overflowed
+
+    synthetic = Profile.fit(pd.DataFrame({"a": values})).emit(n=50, seed=0)
+    assert np.isfinite(synthetic["a"]).all()
+
+
+def test_column_names_colliding_only_after_string_coercion_are_rejected():
+    # Column names are coerced to str so they survive JSON keys; 1 and "1" are distinct in
+    # pandas but identical afterwards, which would silently collapse two real columns.
+    df = pd.DataFrame({1: [1.0] * 20, "1": [2.0] * 20})
+    with pytest.raises(ValueError, match="duplicate column name"):
+        Profile.fit(df)
+
+
+def test_constant_datetime_column_emits_without_crashing():
+    df = pd.DataFrame({"d": pd.to_datetime(["2024-01-01"] * 50)})
+    synthetic = Profile.fit(df).emit(n=5, seed=0)
+    assert len(synthetic) == 5
