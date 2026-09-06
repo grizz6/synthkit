@@ -777,3 +777,59 @@ def test_emit_key_pool_rejects_an_all_null_pool_column(tmp_path):
 
     assert result.exit_code != 0
     assert "is empty" in result.output
+
+
+def _write_inequality_constraints(path, op):
+    path.write_text(
+        "constraints:\n"
+        "  - type: inequality\n"
+        "    left: created_at\n"
+        f'    op: "{op}"\n'
+        "    right: updated_at\n"
+    )
+
+
+def _fit_with_constraint(tmp_path, op, name):
+    rng = np.random.default_rng(0)
+    df = pd.DataFrame(
+        {
+            "created_at": rng.integers(0, 1000, 300).astype(float),
+            "updated_at": rng.integers(0, 1000, 300).astype(float),
+        }
+    )
+    data_path = tmp_path / "data.csv"
+    df.to_csv(data_path, index=False)
+
+    constraints_path = tmp_path / f"{name}.yaml"
+    _write_inequality_constraints(constraints_path, op)
+
+    profile_path = tmp_path / f"{name}.json"
+    result = runner.invoke(
+        app,
+        ["fit", str(data_path), "-o", str(profile_path), "--constraints", str(constraints_path)],
+    )
+    assert result.exit_code == 0, result.output
+    return profile_path
+
+
+def test_inspect_lists_the_actual_constraints_not_just_a_count(tmp_path):
+    profile_path = _fit_with_constraint(tmp_path, "<=", "p")
+
+    result = runner.invoke(app, ["inspect", str(profile_path)])
+
+    assert result.exit_code == 0, result.output
+    assert "1 constraint(s)" in result.output
+    assert "inequality: created_at <= updated_at" in result.output
+
+
+def test_compare_surfaces_a_constraint_change_the_count_alone_would_hide(tmp_path):
+    old_profile = _fit_with_constraint(tmp_path, "<=", "old")
+    new_profile = _fit_with_constraint(tmp_path, "<", "new")
+
+    result = runner.invoke(app, ["compare", str(old_profile), str(new_profile)])
+
+    assert result.exit_code == 0, result.output
+    assert "constraints: 1 -> 1" in result.output  # the count is identical
+    assert "constraint removed: inequality: created_at <= updated_at" in result.output
+    assert "constraint added:   inequality: created_at < updated_at" in result.output
+    assert "no column-level changes" not in result.output
