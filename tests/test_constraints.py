@@ -7,6 +7,7 @@ from synthkit.constraints import (
     Inequality,
     Unique,
     constraints_to_dicts,
+    describe_constraint,
     parse_constraints,
 )
 
@@ -77,3 +78,32 @@ def test_round_trip_through_dicts():
     dicts = constraints_to_dicts(original)
     restored = parse_constraints(dicts)
     assert restored == original
+
+
+def test_describe_constraint_renders_each_type_readably():
+    assert describe_constraint(Inequality("a", "<=", "b")) == "inequality: a <= b"
+    assert describe_constraint(Derived("total", "subtotal + tax")) == (
+        "derived: total = subtotal + tax"
+    )
+    assert describe_constraint(ConditionalNull("cancelled_at", "status != 'x'")) == (
+        "conditional_null: cancelled_at is null when status != 'x'"
+    )
+    assert describe_constraint(Unique(["first", "last"])) == "unique: (first, last)"
+    assert describe_constraint(ForeignKey("customer_id", "customers.id")) == (
+        "foreign_key: customer_id -> customers.id"
+    )
+
+
+def test_describe_constraint_distinguishes_operators():
+    # The whole point of rendering the operator: <= and < differ semantically but are the same
+    # constraint type on the same two columns, so anything comparing by type or count alone
+    # would call them identical.
+    assert describe_constraint(Inequality("a", "<=", "b")) != describe_constraint(
+        Inequality("a", "<", "b")
+    )
+
+
+def test_describe_constraint_survives_a_dict_round_trip():
+    original = [Inequality("a", "<", "b"), Derived("t", "a * 2"), Unique(["id"])]
+    restored = parse_constraints(constraints_to_dicts(original))
+    assert [describe_constraint(c) for c in restored] == [describe_constraint(c) for c in original]
