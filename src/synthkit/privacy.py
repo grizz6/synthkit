@@ -305,3 +305,25 @@ def check(
         passed=ratio >= min_dcr_ratio and identifying_matches == 0 and rare_leaks == 0,
         identifying_matches=identifying_matches,
     )
+
+
+def explain_identifying_matches(
+    synthetic: pd.DataFrame,
+    real: pd.DataFrame,
+    columns: list[str],
+    threshold: int = DEFAULT_RARE_COMBINATION_THRESHOLD,
+) -> dict[str, int]:
+    """Leave-one-out attribution: identifying matches remaining without each column.
+
+    A count on its own says a check failed, not what to do about it. Remediation is almost
+    always to coarsen one quasi-identifier -- a birth date to a year, a zip to its first three
+    digits -- and this says which one to reach for: the column whose removal collapses the
+    count is the column making records unique. A column whose removal changes nothing is not
+    what is exposing anyone, however sensitive it looks.
+    """
+    return {
+        column: count_identifying_matches(
+            synthetic, real, [c for c in columns if c != column], threshold
+        )
+        for column in columns
+    }
