@@ -916,3 +916,34 @@ def test_diff_still_passes_when_only_the_schema_is_unchanged(tmp_path):
     assert "PASSED" in result.output
     assert "MISSING" not in result.output
     assert "NEW in the data" not in result.output
+
+
+def test_check_reports_identifying_matches_separately_from_raw_matches(tmp_path):
+    # The two numbers differ on low-entropy data, and the distinction is the whole reason the
+    # verdict is trustworthy there, so the output has to show both.
+    rng = np.random.default_rng(0)
+    n = 600
+    frame = pd.DataFrame(
+        {"segment": rng.choice(["a", "b"], size=n), "flag": rng.choice(["y", "n"], size=n)}
+    )
+    data_path = tmp_path / "data.csv"
+    frame.to_csv(data_path, index=False)
+    profile_path = tmp_path / "profile.json"
+    runner.invoke(app, ["fit", str(data_path), "-o", str(profile_path)])
+
+    result = runner.invoke(
+        app,
+        [
+            "check",
+            str(data_path),
+            "--profile",
+            str(profile_path),
+            "--real",
+            str(data_path),
+            "--min-dcr-ratio",
+            "0",
+        ],
+    )
+
+    assert "exact_matches:" in result.output
+    assert "identifying_matches:" in result.output
