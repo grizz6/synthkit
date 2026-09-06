@@ -191,3 +191,36 @@ def test_boolean_drift_is_zero_when_current_column_is_all_null():
     fresh = pd.DataFrame({"is_active": pd.array([None] * 100, dtype="boolean")})
     report = compute_drift(profile, fresh)
     assert report.column_drift["is_active"] == 0.0
+
+
+def test_drift_handles_timezone_aware_columns():
+    # DatetimeMarginal.sample() returns a tz-aware index for a tz-aware source, and drift feeds
+    # that back through to_epoch_seconds against fresh data. Nothing covered the aware path, so
+    # a naive/aware mismatch in that comparison would have gone unnoticed.
+    rng = np.random.default_rng(0)
+    dates = pd.to_datetime("2022-01-01T00:00:00+00:00") + pd.to_timedelta(
+        rng.integers(0, 900, 400), unit="D"
+    )
+    df = pd.DataFrame({"created_at": dates})
+    profile = Profile.fit(df)
+
+    report = compute_drift(profile, df)
+    assert report.passed
+    assert report.column_drift["created_at"] < DEFAULT_DRIFT_THRESHOLD
+
+
+def test_drift_detects_a_shift_in_a_timezone_aware_column():
+    rng = np.random.default_rng(0)
+    base = pd.to_datetime("2022-01-01T00:00:00+00:00")
+    df = pd.DataFrame({"t": base + pd.to_timedelta(rng.integers(0, 365, 400), unit="D")})
+    profile = Profile.fit(df)
+
+    shifted = pd.DataFrame(
+        {
+            "t": pd.to_datetime("2026-01-01T00:00:00+00:00")
+            + pd.to_timedelta(np.random.default_rng(1).integers(0, 365, 400), unit="D")
+        }
+    )
+    report = compute_drift(profile, shifted)
+    assert not report.passed
+    assert "t" in report.drifted_columns

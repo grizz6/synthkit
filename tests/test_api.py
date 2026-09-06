@@ -107,3 +107,23 @@ def test_profile_save_load_accessible_from_top_level(tmp_path):
     profile.save(path)
     reloaded = sk.Profile.load(path)
     assert reloaded.columns == profile.columns
+
+
+def test_check_handles_timezone_aware_datetime_columns():
+    # ks_by_column runs both sides through to_epoch_seconds, and the privacy side computes
+    # Gower distances over the same column; neither path had a tz-aware test.
+    rng = np.random.default_rng(0)
+    n = 400
+    real = pd.DataFrame(
+        {
+            "created_at": pd.to_datetime("2022-01-01T00:00:00+00:00")
+            + pd.to_timedelta(rng.integers(0, 900, n), unit="D"),
+            "amount": rng.normal(50, 10, n),
+        }
+    )
+    profile = sk.fit(real)
+    synthetic = sk.emit(profile, n=n, seed=0)
+
+    report = sk.check(synthetic, profile, real=real)
+    assert report.ks_by_column["created_at"] < 0.2
+    assert np.isfinite(report.dcr_ratio)
