@@ -74,6 +74,10 @@ synthkit emit profiles/customers.json -n 10000 --seed 42 -o fixtures/customers.p
 # verify what you generated; exits non-zero on failure
 synthkit check fixtures/customers.parquet --profile profiles/customers.json --real data/customers.parquet
 
+# if it fails, find out which column is making records identifiable
+synthkit check fixtures/customers.parquet --profile profiles/customers.json \
+    --real data/customers.parquet --explain
+
 # has production drifted away from the profile your fixtures are built on?
 # fails on a shifted distribution or a changed schema (a column added or dropped)
 synthkit diff profiles/customers.json data/customers_2026Q3.parquet
