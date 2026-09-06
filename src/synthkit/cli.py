@@ -15,7 +15,7 @@ from typing import Any
 import typer
 
 from synthkit import __version__, privacy
-from synthkit.constraints import parse_constraints
+from synthkit.constraints import describe_constraint, parse_constraints
 from synthkit.drift import DEFAULT_DRIFT_THRESHOLD, compute_drift
 from synthkit.inspect import compare_profiles, summarize_profile
 from synthkit.io import read_table, write_table
@@ -344,6 +344,8 @@ def inspect(
         f"{len(profile_obj.columns)} columns, {profile_obj.n_rows_fit} rows fit on, "
         f"{len(profile_obj.constraints)} constraint(s)"
     )
+    for constraint in parse_constraints(profile_obj.constraints):
+        typer.echo(f"    {describe_constraint(constraint)}")
     typer.echo()
 
     name_width = max((len(s.name) for s in summaries), default=0)
@@ -408,6 +410,11 @@ def compare(
         typer.echo(f"changed: {column.name}")
         for change in column.changes:
             typer.echo(f"    {change}")
+
+    for rule in comparison.constraints_removed:
+        typer.echo(f"constraint removed: {rule}")
+    for rule in comparison.constraints_added:
+        typer.echo(f"constraint added:   {rule}")
 
     if not comparison.any_changes:
         typer.echo("no column-level changes")
