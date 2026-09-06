@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from synthkit.marginals import BooleanMarginal, DatetimeMarginal
+from synthkit.marginals import BooleanMarginal, DatetimeMarginal, to_epoch_seconds
 
 
 def test_boolean_marginal_fits_probability():
@@ -100,7 +100,9 @@ def test_timezone_aware_datetime_sample_reproduces_the_phase_offset():
     dates = pd.Series(pd.date_range("2024-11-05", periods=30, freq="D", tz="US/Eastern"))
     marginal = DatetimeMarginal.fit(dates)
     sampled = marginal.sample(np.linspace(0, 1, 50))
-    epoch = sampled.to_numpy().astype("datetime64[s]").astype("int64")
+    # sample() returns a tz-aware index for a tz-aware source, so go through the package's own
+    # converter rather than a bare .to_numpy().astype(), which drops the zone with a warning.
+    epoch = to_epoch_seconds(pd.Series(sampled))
     # Every sampled value should land exactly on a daily boundary shifted by the phase, not on
     # a bare UTC-midnight boundary (which would silently move the data by 5 hours).
     assert np.all((epoch - marginal.phase_seconds) % 86400 == 0)
@@ -128,3 +130,45 @@ def test_datetime_phase_defaults_to_zero_for_older_serialized_profiles():
     del data["phase_seconds"]
     restored = DatetimeMarginal.from_dict(data)
     assert restored.phase_seconds == 0
+
+
+def test_timezone_aware_column_stays_timezone_aware_through_sample():
+    # Regression test: a tz-aware column used to come back naive, so code that worked against
+    # the real column (.dt.tz_convert(...)) raised TypeError against the fixture -- the exact
+    # real-versus-fixture divergence this package exists to prevent.
+    dates = pd.Series(pd.date_range("2024-01-01", periods=40, freq="D", tz="UTC"))
+    sampled = DatetimeMarginal.fit(dates).sample(np.linspace(0, 1, 20))
+    assert sampled.tz is not None
+    assert str(sampled.tz) == "UTC"
+
+
+def test_non_utc_timezone_is_preserved_exactly():
+    dates = pd.Series(pd.date_range("2024-01-01", periods=40, freq="D", tz="Asia/Tokyo"))
+    sampled = DatetimeMarginal.fit(dates).sample(np.linspace(0, 1, 20))
+    assert str(sampled.tz) == "Asia/Tokyo"
+
+
+def test_naive_column_stays_naive():
+    dates = pd.Series(pd.date_range("2024-01-01", periods=40, freq="D"))
+    sampled = DatetimeMarginal.fit(dates).sample(np.linspace(0, 1, 20))
+    assert sampled.tz is None
+
+
+def test_timezone_survives_a_dict_round_trip():
+    dates = pd.Series(pd.date_range("2024-01-01", periods=40, freq="D", tz="Asia/Tokyo"))
+    marginal = DatetimeMarginal.fit(dates)
+    restored = DatetimeMarginal.from_dict(marginal.to_dict())
+    assert restored.timezone == "Asia/Tokyo"
+    assert str(restored.sample(np.linspace(0, 1, 5)).tz) == "Asia/Tokyo"
+
+
+def test_profile_written_before_timezones_were_recorded_still_loads():
+    # Forward compatibility in the other direction: a profile.json fitted by an older synthkit
+    # has no "timezone" key at all, and must still load rather than KeyError.
+    dates = pd.Series(pd.date_range("2024-01-01", periods=40, freq="D"))
+    legacy = DatetimeMarginal.fit(dates).to_dict()
+    del legacy["timezone"]
+
+    restored = DatetimeMarginal.from_dict(legacy)
+    assert restored.timezone is None
+    assert restored.sample(np.linspace(0, 1, 5)).tz is None

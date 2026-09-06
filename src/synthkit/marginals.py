@@ -294,6 +294,7 @@ class DatetimeMarginal:
     numeric: NumericMarginal
     granularity_seconds: int
     phase_seconds: int = 0
+    timezone: str | None = None
 
     @classmethod
     def fit(cls, values: pd.Series) -> DatetimeMarginal:
@@ -305,7 +306,18 @@ class DatetimeMarginal:
         granularity, phase = _infer_granularity(epoch_seconds)
         numeric = NumericMarginal.fit(pd.Series(epoch_seconds.astype(float)))
 
-        return cls(numeric=numeric, granularity_seconds=granularity, phase_seconds=phase)
+        # Recorded so emitted output keeps the source column's awareness. Dropping it makes
+        # fixtures that look right but behave differently: .dt.tz_convert() works on the real
+        # column and raises on the synthetic one, which is exactly the divergence between real
+        # and fixture data that this package exists to avoid.
+        tz = getattr(clean.dtype, "tz", None)
+
+        return cls(
+            numeric=numeric,
+            granularity_seconds=granularity,
+            phase_seconds=phase,
+            timezone=str(tz) if tz is not None else None,
+        )
 
     def sample(self, u: np.ndarray) -> pd.DatetimeIndex:
         raw_seconds = self.numeric.sample(u)
@@ -314,7 +326,12 @@ class DatetimeMarginal:
             np.round(shifted / self.granularity_seconds) * self.granularity_seconds
             + self.phase_seconds
         )
-        return pd.to_datetime(quantized.astype("int64"), unit="s")
+        sampled = pd.to_datetime(quantized.astype("int64"), unit="s")
+        if self.timezone is None:
+            return sampled
+        # to_epoch_seconds() normalizes to UTC, so the values are UTC instants; localize as
+        # UTC first, then convert, rather than asserting the wall-clock reading is local.
+        return sampled.tz_localize("UTC").tz_convert(self.timezone)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -322,6 +339,7 @@ class DatetimeMarginal:
             "numeric": self.numeric.to_dict(),
             "granularity_seconds": self.granularity_seconds,
             "phase_seconds": self.phase_seconds,
+            "timezone": self.timezone,
         }
 
     @classmethod
@@ -330,6 +348,7 @@ class DatetimeMarginal:
             numeric=NumericMarginal.from_dict(data["numeric"]),
             granularity_seconds=data["granularity_seconds"],
             phase_seconds=data.get("phase_seconds", 0),
+            timezone=data.get("timezone"),
         )
 
 
