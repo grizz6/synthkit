@@ -93,19 +93,35 @@ class DriftReport:
     column_drift: dict[str, float]
     drifted_columns: list[str]
     passed: bool
+    missing_columns: list[str]
+    new_columns: list[str]
 
     @property
     def max_drift(self) -> float:
         return max(self.column_drift.values(), default=0.0)
 
+    @property
+    def schema_changed(self) -> bool:
+        return bool(self.missing_columns or self.new_columns)
+
 
 def compute_drift(
     profile: Profile, current: pd.DataFrame, threshold: float = DEFAULT_DRIFT_THRESHOLD
 ) -> DriftReport:
+    """Compare fresh data against the profile fixtures are built on.
+
+    Reports two independent kinds of drift. Distribution drift is a column the profile still
+    knows whose values have moved. Schema drift is the column set itself changing, which
+    matters more: a column the profile models but production has dropped means fixtures
+    generate something real data no longer has, and a column production has gained means
+    fixtures are missing it entirely. Either one breaks tests in ways that look unrelated to
+    the change that caused them, so both fail the check rather than being skipped quietly.
+    """
+    current_columns = set(current.columns.astype(str))
     column_drift: dict[str, float] = {}
 
     for column in profile.columns:
-        if column not in current.columns:
+        if column not in current_columns:
             continue
 
         ctype = profile.column_types[column]
@@ -116,5 +132,13 @@ def compute_drift(
         column_drift[column] = _DRIFT_FUNCTIONS[ctype](marginal_dict, current[column])
 
     drifted = [c for c, score in column_drift.items() if score > threshold]
+    missing = [c for c in profile.columns if c not in current_columns]
+    new = [str(c) for c in current.columns if str(c) not in set(profile.columns)]
 
-    return DriftReport(column_drift=column_drift, drifted_columns=drifted, passed=not drifted)
+    return DriftReport(
+        column_drift=column_drift,
+        drifted_columns=drifted,
+        passed=not drifted and not missing and not new,
+        missing_columns=missing,
+        new_columns=new,
+    )

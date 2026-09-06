@@ -80,11 +80,16 @@ def test_other_bucket_does_not_inflate_drift_for_unchanged_tail():
     assert report.column_drift["tag"] < DEFAULT_DRIFT_THRESHOLD
 
 
-def test_ignores_columns_not_present_in_current_data():
+def test_column_absent_from_current_data_is_unscored_but_reported_missing():
+    # It cannot be scored -- there are no values to compare against -- but it is not
+    # "ignored": a column the profile models and production has dropped is drift, and the
+    # loudest kind, since fixtures keep generating something real data no longer has.
     df = make_df(seed=0)
     profile = Profile.fit(df)
     report = compute_drift(profile, df.drop(columns=["plan_tier"]))
     assert "plan_tier" not in report.column_drift
+    assert report.missing_columns == ["plan_tier"]
+    assert not report.passed
 
 
 def test_no_drift_for_unchanged_datetime_column():
@@ -224,3 +229,70 @@ def test_drift_detects_a_shift_in_a_timezone_aware_column():
     report = compute_drift(profile, shifted)
     assert not report.passed
     assert "t" in report.drifted_columns
+
+
+def test_schema_change_fails_even_when_surviving_distributions_are_identical():
+    # Regression test: drift skipped any column missing from the fresh data and never looked
+    # at columns the fresh data had gained, so a profile could pass cleanly against data whose
+    # schema had moved out from under it -- and `synthkit diff` would exit 0 in CI while the
+    # committed fixtures no longer matched production at all.
+    rng = np.random.default_rng(0)
+    n = 500
+    profile = Profile.fit(
+        pd.DataFrame({"age": rng.normal(40, 10, n), "income": rng.normal(50000, 10000, n)})
+    )
+
+    # Same distribution for the surviving column: only the schema moved.
+    changed = pd.DataFrame({"age": rng.normal(40, 10, n), "tenure": rng.normal(5, 2, n)})
+    report = compute_drift(profile, changed)
+
+    assert report.column_drift["age"] < DEFAULT_DRIFT_THRESHOLD  # what remains has not drifted
+    assert report.missing_columns == ["income"]
+    assert report.new_columns == ["tenure"]
+    assert report.schema_changed
+    assert not report.passed
+
+
+def test_new_column_alone_is_enough_to_fail():
+    # Fixtures built from this profile have no such column, so any test touching it breaks.
+    rng = np.random.default_rng(0)
+    n = 400
+    df = pd.DataFrame({"age": rng.normal(40, 10, n)})
+    profile = Profile.fit(df)
+
+    report = compute_drift(profile, df.assign(loyalty=rng.normal(3, 1, n)))
+    assert report.new_columns == ["loyalty"]
+    assert report.missing_columns == []
+    assert not report.passed
+
+
+def test_unchanged_schema_reports_no_schema_drift():
+    rng = np.random.default_rng(0)
+    n = 400
+    df = pd.DataFrame({"age": rng.normal(40, 10, n), "score": rng.normal(10, 2, n)})
+    profile = Profile.fit(df)
+
+    report = compute_drift(profile, df)
+    assert report.missing_columns == []
+    assert report.new_columns == []
+    assert not report.schema_changed
+    assert report.passed
+
+
+def test_identifier_and_text_columns_are_unscored_without_counting_as_schema_drift():
+    # These types have no drift function, but they are present on both sides, so skipping them
+    # for scoring must not be confused with the column being absent.
+    notes = [f"note number {i} with words" for i in range(35)]
+    df = pd.DataFrame(
+        {
+            "user_id": [f"user_{i}" for i in range(60)],
+            "notes": notes + notes[:25],
+        }
+    )
+    profile = Profile.fit(df)
+
+    report = compute_drift(profile, df)
+    assert report.column_drift == {}
+    assert report.missing_columns == []
+    assert report.new_columns == []
+    assert report.passed
