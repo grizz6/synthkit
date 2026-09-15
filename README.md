@@ -2,6 +2,17 @@
 
 pytest fixtures that look like your production data, without your production data.
 
+## About
+
+synthkit is a Python library and CLI that learns the statistical shape of a real dataset and generates synthetic rows with that shape, so tests, demos, and bug reports never need real records.
+
+- **Fit once, generate forever:** a small JSON profile holds column distributions, cross-column correlation, null patterns, and business rules, but no real rows. Commit it and emit fixtures from it in CI.
+- **Keeps relationships:** a Gaussian copula over non-parametric marginals preserves the correlations that independent, Faker-style generation loses.
+- **Measures privacy instead of assuming it:** `check` compares synthetic-to-real distances against a real holdout and can name the column that makes records identifiable.
+- **Fits into a workflow:** a pytest fixture plugin, deterministic seeds, drift detection against fresh production data, and a readable `compare` for reviewing re-fitted profiles in PRs.
+
+**Status:** pre-alpha (`0.0.1`), not yet on PyPI. 316 tests; CI runs pytest on Linux, macOS, and Windows with Python 3.10–3.13, plus ruff and mypy. Worked examples use the Adult Census, Titanic, Wine Quality, and Bike Sharing datasets (`examples/`).
+
 ## The problem
 
 Teams hold data with real people in it and can't put those rows in a test suite, a demo
@@ -41,6 +52,9 @@ throws away.
 
 It's also fast enough for a pull-request check: roughly 2 million rows/sec emitted from a
 committed profile on a 6-column dataset (see [scripts/benchmark.py](scripts/benchmark.py)).
+The benchmark script's own rows/sec column comes out several times lower than that, because
+it times `emit()` with `tracemalloc` running to record peak memory. Time `emit()` on its own
+to see the raw throughput.
 
 ## Install
 
