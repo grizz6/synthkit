@@ -133,6 +133,22 @@ def test_multi_column_unique_disambiguates_actual_collisions():
     assert (fixed["first_name"] == "Alice").all()  # only the last column was disambiguated
 
 
+def test_multi_column_unique_suffix_does_not_collide_with_an_existing_value():
+    # Regression test: the second ("x", "k") was renamed to ("x", "k_2") without checking that
+    # ("x", "k_2") was already a row, so the "repaired" frame still had a duplicate.
+    df = pd.DataFrame({"a": ["x", "x", "x"], "b": ["k", "k", "k_2"]})
+    fixed = apply_constraints(df, [Unique(["a", "b"])], rng=np.random.default_rng(0))
+    assert not fixed.duplicated(["a", "b"]).any()
+
+
+def test_multi_column_unique_does_not_confuse_values_containing_the_separator():
+    # ("a|b", "c") and ("a", "b|c") are distinct combinations, even though joining each with
+    # "|" produces the same string, so neither row should be touched.
+    df = pd.DataFrame({"x": ["a|b", "a"], "y": ["c", "b|c"]})
+    fixed = apply_constraints(df, [Unique(["x", "y"])], rng=np.random.default_rng(0))
+    pd.testing.assert_frame_equal(fixed, df)
+
+
 def test_derived_column_is_recomputed():
     df = pd.DataFrame({"subtotal": [10.0, 20.0], "tax": [1.0, 2.0], "total": [0.0, 0.0]})
     fixed = apply_constraints(df, [Derived("total", "subtotal + tax")])

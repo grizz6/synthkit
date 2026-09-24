@@ -92,23 +92,27 @@ def _repair_unique(df: pd.DataFrame, columns: list[str], rng: np.random.Generato
 
     # Only the combination of all `columns` needs to be unique. Disambiguate only rows whose
     # combination actually collides with an earlier row, by suffixing the last column, rather
-    # than overwriting every listed column for every row.
-    combo_key = df[columns].astype(str).agg("|".join, axis=1)
-    seen: dict[str, int] = {}
-    occurrence = np.empty(len(df), dtype=int)
-    for i, key in enumerate(combo_key):
-        seen[key] = seen.get(key, 0) + 1
-        occurrence[i] = seen[key]
+    # than overwriting every listed column for every row. Keys are tuples, not joined strings,
+    # so ("a|b", "c") and ("a", "b|c") aren't mistaken for the same combination.
+    combos = [tuple(row) for row in df[columns].astype(str).itertuples(index=False)]
+    taken = set(combos)
+    seen: set[tuple[str, ...]] = set()
+    last_column = columns[-1]
+    last_position = df.columns.get_loc(last_column)
 
-    duplicated = occurrence > 1
-    if duplicated.any():
-        last_column = columns[-1]
-        df.loc[duplicated, last_column] = [
-            f"{value}_{count}"
-            for value, count in zip(
-                df.loc[duplicated, last_column], occurrence[duplicated], strict=True
-            )
-        ]
+    for i, combo in enumerate(combos):
+        if combo not in seen:
+            seen.add(combo)
+            continue
+        # A suffixed value can itself already be a real row (e.g. "k_2"), so keep counting
+        # until the new combination is free.
+        value = df.iat[i, last_position]
+        count = 2
+        while (candidate := (*combo[:-1], f"{value}_{count}")) in taken:
+            count += 1
+        df.iat[i, last_position] = candidate[-1]
+        taken.add(candidate)
+        seen.add(candidate)
 
     return df
 
