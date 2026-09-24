@@ -2,7 +2,8 @@
 
 Each constraint type gets a different repair strategy, applied in a fixed order:
 
-- Derived columns are recomputed, never sampled.
+- Derived columns are recomputed, never sampled, and recomputed again after inequality
+  repair in case a swap changed one of their inputs.
 - Inequalities are repaired by swapping the two values, which preserves both columns'
   marginal distributions exactly (clamping would not).
 - Conditional nulls are applied directly.
@@ -152,6 +153,12 @@ def apply_constraints(
     for constraint in constraints:
         if isinstance(constraint, Inequality):
             df = _repair_inequality(df, constraint)
+
+    # An inequality swap can change a value a derived column was computed from. Recompute
+    # before conditional nulls, so a rule that nulls a derived column still has the last word.
+    for constraint in constraints:
+        if isinstance(constraint, Derived):
+            df = _repair_derived(df, constraint)
 
     for constraint in constraints:
         if isinstance(constraint, ConditionalNull):
