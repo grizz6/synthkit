@@ -92,6 +92,24 @@ def test_strict_inequality_nudges_the_other_side_when_datetime_min_would_overflo
     assert fixed["end"].iloc[0] == bottom
 
 
+def test_strict_inequality_nudges_the_other_side_when_integer_max_would_overflow():
+    # Regression test: integer addition wraps silently instead of raising, so nudging a tie at
+    # the int64 maximum turned `end` into the int64 minimum and left `start < end` violated.
+    top = np.iinfo("int64").max
+    df = pd.DataFrame({"start": [top], "end": [top]})
+    fixed = apply_constraints(df, [Inequality("start", "<", "end")])
+    assert fixed["start"].iloc[0] < fixed["end"].iloc[0]
+    assert fixed["end"].iloc[0] == top
+
+
+def test_strict_inequality_nudges_the_other_side_when_integer_min_would_overflow():
+    bottom = np.iinfo("int32").min
+    df = pd.DataFrame({"start": [bottom], "end": [bottom]}, dtype="int32")
+    fixed = apply_constraints(df, [Inequality("start", ">", "end")])
+    assert fixed["start"].iloc[0] > fixed["end"].iloc[0]
+    assert fixed["end"].iloc[0] == bottom
+
+
 def test_strict_inequality_leaves_string_ties_unresolved():
     # Documented limitation: there's no well-defined "smallest step" for strings, so a tie
     # between two string columns is left as-is rather than guessed at.

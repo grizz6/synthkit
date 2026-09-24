@@ -35,6 +35,11 @@ def _nudge(series: pd.Series, step: int) -> pd.Series:
     if pd.api.types.is_datetime64_any_dtype(series):
         return series + pd.Timedelta(seconds=step)
     if pd.api.types.is_integer_dtype(series):
+        # Integer addition wraps around silently rather than raising, so check the bounds
+        # first and raise the same OverflowError a datetime would.
+        bounds = np.iinfo(series.dtype)
+        if (series == (bounds.max if step > 0 else bounds.min)).any():
+            raise OverflowError(f"nudging {series.dtype} past its {'max' if step > 0 else 'min'}")
         return series + step
     if pd.api.types.is_float_dtype(series):
         target = np.inf if step > 0 else -np.inf
@@ -64,8 +69,8 @@ def _repair_inequality(df: pd.DataFrame, constraint: Inequality) -> pd.DataFrame
             try:
                 df.loc[tied, right] = _nudge(df.loc[tied, right], step)
             except OverflowError:
-                # A datetime tie sitting at pd.Timestamp.max/.min (a common "never expires" or
-                # "no start date" sentinel) overflows when nudged further in that direction.
+                # A tie sitting at the dtype's max/min (pd.Timestamp.max is a common "never
+                # expires" sentinel) overflows when nudged further in that direction.
                 # Nudge the other side the opposite way instead.
                 df.loc[tied, left] = _nudge(df.loc[tied, left], -step)
 
