@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 from scipy.stats import ks_2samp
 
-from synthkit.constraints import ConditionalNull, ForeignKey, Inequality, Unique
+from synthkit.constraints import ConditionalNull, Derived, ForeignKey, Inequality, Unique
 from synthkit.inspect import compare_profiles
 from synthkit.profile import Profile, _pseudo_uniform
 from synthkit.types import ColumnType
@@ -469,3 +469,46 @@ def test_timezone_survives_profile_save_and_load(tmp_path):
 
     emitted = Profile.load(path).emit(n=10, seed=0)
     assert str(emitted["t"].dt.tz) == "Asia/Tokyo"
+
+
+def test_fit_on_a_single_row_still_emits_the_requested_number_of_rows():
+    df = make_correlated_df(n=1)
+    synthetic = Profile.fit(df).emit(n=5, seed=0)
+    assert len(synthetic) == 5
+    assert list(synthetic.columns) == list(df.columns)
+
+
+def test_fit_on_zero_rows_still_emits_the_requested_number_of_rows():
+    df = make_correlated_df().head(0)
+    synthetic = Profile.fit(df).emit(n=5, seed=0)
+    assert len(synthetic) == 5
+    assert list(synthetic.columns) == list(df.columns)
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_every_declared_constraint_holds_on_emitted_rows(seed):
+    # End to end rather than per repair function: the constraints have to survive the copula,
+    # the marginals, and each other.
+    rng = np.random.default_rng(0)
+    n = 500
+    subtotal = rng.gamma(2.0, 20.0, n).round(2)
+    df = pd.DataFrame(
+        {
+            "region": rng.choice(["north", "south"], n),
+            "store": rng.choice(["a", "b", "c"], n),
+            "subtotal": subtotal,
+            "tax": (subtotal * 0.08).round(2),
+            "total": subtotal * 1.08,
+            "cap": subtotal + rng.uniform(0, 50, n),
+        }
+    )
+    constraints = [
+        Derived("total", "subtotal + tax"),
+        Inequality("subtotal", "<=", "cap"),
+        Unique(["region", "store"]),
+    ]
+    synthetic = Profile.fit(df, constraints=constraints).emit(n=300, seed=seed)
+
+    assert (synthetic["subtotal"] <= synthetic["cap"]).all()
+    np.testing.assert_allclose(synthetic["total"], synthetic["subtotal"] + synthetic["tax"])
+    assert not synthetic.duplicated(["region", "store"]).any()

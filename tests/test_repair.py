@@ -264,3 +264,11 @@ def test_conditional_null_on_a_derived_column_still_wins_after_recomputation():
         ],
     )
     assert fixed["total"].isna().tolist() == [False, True]
+
+
+def test_inequality_leaves_rows_with_a_null_side_alone():
+    # A missing value can't be compared, so the row neither counts as a violation nor gets a
+    # value swapped into the null's place.
+    df = pd.DataFrame({"a": [1.0, np.nan, 5.0], "b": [2.0, 3.0, np.nan]})
+    fixed = apply_constraints(df, [Inequality("a", "<", "b")])
+    pd.testing.assert_frame_equal(fixed, df)
