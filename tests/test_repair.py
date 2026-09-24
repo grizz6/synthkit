@@ -236,3 +236,31 @@ def test_constraints_applied_in_correct_order():
     )
     assert fixed["total"].iloc[0] == 11.0
     assert fixed["cap"].iloc[0] <= fixed["total"].iloc[0]
+
+
+def test_derived_column_stays_consistent_when_an_inequality_swaps_its_input():
+    # Regression test: Derived ran before Inequality, so when the inequality swapped a value
+    # the derived column was computed from, the derived column was left stale.
+    df = pd.DataFrame(
+        {"subtotal": [10.0, 50.0], "tax": [1.0, 1.0], "total": [0.0, 0.0], "cap": [20.0, 20.0]}
+    )
+    fixed = apply_constraints(
+        df, [Derived("total", "subtotal + tax"), Inequality("subtotal", "<=", "cap")]
+    )
+    assert (fixed["subtotal"] <= fixed["cap"]).all()
+    assert (fixed["total"] == fixed["subtotal"] + fixed["tax"]).all()
+
+
+def test_conditional_null_on_a_derived_column_still_wins_after_recomputation():
+    df = pd.DataFrame(
+        {"subtotal": [10.0, 50.0], "tax": [1.0, 1.0], "total": [0.0, 0.0], "cap": [20.0, 20.0]}
+    )
+    fixed = apply_constraints(
+        df,
+        [
+            Derived("total", "subtotal + tax"),
+            Inequality("subtotal", "<=", "cap"),
+            ConditionalNull("total", "subtotal > 15"),
+        ],
+    )
+    assert fixed["total"].isna().tolist() == [False, True]
