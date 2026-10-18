@@ -272,3 +272,23 @@ def test_inequality_leaves_rows_with_a_null_side_alone():
     df = pd.DataFrame({"a": [1.0, np.nan, 5.0], "b": [2.0, 3.0, np.nan]})
     fixed = apply_constraints(df, [Inequality("a", "<", "b")])
     pd.testing.assert_frame_equal(fixed, df)
+
+
+def test_a_derived_comparison_keeps_an_integer_column_as_zero_and_one():
+    # Regression test: a Derived rule built from comparisons evaluates to bool, and the result
+    # replaced an integer 0/1 column wholesale, so emitted workingday came out True/False.
+    df = pd.DataFrame(
+        {"weekday": [0, 1, 3, 6], "holiday": [0, 0, 1, 0], "workingday": [0, 0, 0, 0]}
+    )
+    fixed = apply_constraints(
+        df, [Derived("workingday", "(weekday >= 1) * (weekday <= 5) * (holiday == 0)")]
+    )
+    assert fixed["workingday"].dtype == df["workingday"].dtype
+    assert fixed["workingday"].tolist() == [0, 1, 0, 0]
+
+
+def test_a_derived_column_that_was_boolean_stays_boolean():
+    df = pd.DataFrame({"amount": [5.0, 50.0], "is_large": [False, False]})
+    fixed = apply_constraints(df, [Derived("is_large", "amount > 10")])
+    assert fixed["is_large"].tolist() == [False, True]
+    assert fixed["is_large"].dtype == bool

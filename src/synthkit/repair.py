@@ -79,7 +79,13 @@ def _repair_inequality(df: pd.DataFrame, constraint: Inequality) -> pd.DataFrame
 
 
 def _repair_derived(df: pd.DataFrame, constraint: Derived) -> pd.DataFrame:
-    df[constraint.column] = df.eval(constraint.expr)
+    result = df.eval(constraint.expr)
+    original = df[constraint.column]
+    # A rule built from comparisons evaluates to bool. When the column holds numbers (a 0/1
+    # flag like workingday), keep it in its own dtype rather than turning it into True/False.
+    if pd.api.types.is_bool_dtype(result) and pd.api.types.is_integer_dtype(original):
+        result = result.astype(original.dtype)
+    df[constraint.column] = result
     return df
 
 
