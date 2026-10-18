@@ -1172,3 +1172,39 @@ def test_diff_json_reports_null_rate_drift(tmp_path):
     report = json.loads(result.stdout)
     assert report["null_drifted_columns"] == ["amount"]
     assert report["null_rate_drift"]["amount"] == 1.0
+
+
+def test_fit_reports_an_empty_csv_without_a_traceback(tmp_path):
+    data_path = tmp_path / "data.csv"
+    data_path.write_text("")
+
+    result = runner.invoke(app, ["fit", str(data_path), "-o", str(tmp_path / "p.json")])
+
+    assert result.exit_code == 1
+    assert "data.csv is empty" in result.output
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+
+
+def test_fit_reports_an_unsupported_extension_without_a_traceback(tmp_path):
+    data_path = tmp_path / "data.txt"
+    data_path.write_text("a\n1\n")
+
+    result = runner.invoke(app, ["fit", str(data_path), "-o", str(tmp_path / "p.json")])
+
+    assert result.exit_code == 1
+    assert "unsupported file extension: '.txt'" in result.output
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+
+
+def test_diff_reports_an_unreadable_data_file_without_a_traceback(tmp_path):
+    data_path = tmp_path / "data.csv"
+    make_df().to_csv(data_path, index=False)
+    profile_path = tmp_path / "profile.json"
+    runner.invoke(app, ["fit", str(data_path), "-o", str(profile_path)])
+    empty_path = tmp_path / "fresh.csv"
+    empty_path.write_text("")
+
+    result = runner.invoke(app, ["diff", str(profile_path), str(empty_path)])
+
+    assert result.exit_code == 1
+    assert "fresh.csv is empty" in result.output

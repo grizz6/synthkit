@@ -153,3 +153,12 @@ def test_fixed_utc_offset_in_csv_is_preserved_not_normalized_to_utc(tmp_path):
 
     emitted = Profile.fit(loaded).emit(n=5, seed=0)
     assert str(emitted["t"].dt.tz) == "UTC-05:00"
+
+
+def test_an_empty_csv_raises_a_value_error_naming_the_file(tmp_path):
+    # Regression test: a zero-byte CSV surfaced pandas' own EmptyDataError, which the CLI
+    # printed as a full traceback instead of saying which file was empty.
+    path = tmp_path / "data.csv"
+    path.write_text("")
+    with pytest.raises(ValueError, match=r"data\.csv is empty"):
+        read_table(path)

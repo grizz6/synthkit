@@ -12,6 +12,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 import typer
 
 from synthkit import __version__, privacy
@@ -43,6 +44,15 @@ def main(
     ),
 ) -> None:
     pass
+
+
+def _read_table_or_exit(path: Path) -> pd.DataFrame:
+    """read_table, but an unreadable file is a one-line error and exit 1, not a traceback."""
+    try:
+        return read_table(path)
+    except ValueError as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(code=1) from e
 
 
 def _parse_column_types(overrides: list[str]) -> dict[str, ColumnType]:
@@ -96,7 +106,7 @@ def fit(
     ),
 ) -> None:
     """Fit a profile on real data. No real rows are written to `output`."""
-    df = read_table(data)
+    df = _read_table_or_exit(data)
     parsed_constraints = parse_constraints(constraints) if constraints else None
     column_types = _parse_column_types(column_type)
 
@@ -160,7 +170,10 @@ def _parse_key_pools(specs: list[str]) -> dict[str, list[Any]]:
             # NAME=FILE:COLUMN string, so this would otherwise be a bare FileNotFoundError.
             raise typer.BadParameter(f"key pool file for {name!r} does not exist: {path_text}")
 
-        table = read_table(path)
+        try:
+            table = read_table(path)
+        except ValueError as e:
+            raise typer.BadParameter(f"key pool for {name!r}: {e}") from e
         if column not in table.columns:
             available = ", ".join(map(str, table.columns))
             raise typer.BadParameter(f"column {column!r} not in {path_text} (has: {available})")
@@ -266,8 +279,8 @@ def check(
     ),
 ) -> None:
     """Verify synthetic fixtures against a privacy baseline. Exits non-zero on failure."""
-    synthetic = read_table(fixtures)
-    real_df = read_table(real)
+    synthetic = _read_table_or_exit(fixtures)
+    real_df = _read_table_or_exit(real)
     profile_obj = Profile.load(profile)
 
     try:
@@ -355,7 +368,7 @@ def diff(
 ) -> None:
     """Check whether fresh data has drifted away from the profile fixtures are built on."""
     profile_obj = Profile.load(profile)
-    df = read_table(data)
+    df = _read_table_or_exit(data)
 
     report = compute_drift(profile_obj, df, threshold=threshold)
 

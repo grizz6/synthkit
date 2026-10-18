@@ -53,7 +53,11 @@ def read_table(path: str | Path) -> pd.DataFrame:
     if path.suffix == ".parquet":
         return pd.read_parquet(path)
     if path.suffix == ".csv":
-        return _parse_iso_datetime_columns(pd.read_csv(path))
+        try:
+            frame = pd.read_csv(path)
+        except pd.errors.EmptyDataError as e:
+            raise ValueError(f"{path} is empty: no header row to read columns from") from e
+        return _parse_iso_datetime_columns(frame)
     raise _unsupported(path.suffix)
 
 
