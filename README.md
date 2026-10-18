@@ -121,6 +121,14 @@ synthkit emit profiles/orders.json -n 10000 --seed 42 -o fixtures/orders.parquet
 def test_billing_rollup(synth_frame):
     df = synth_frame("profiles/customers.json", n=500, seed=0)
     assert rollup(df).total.sum() == pytest.approx(df.total.sum())
+
+
+def test_orders_join_to_customers(synth_frame):
+    customers = synth_frame("profiles/customers.json", n=100, seed=0)
+    orders = synth_frame(
+        "profiles/orders.json", n=1000, seed=0, key_pools={"customer_id": customers.id.tolist()}
+    )
+    assert orders.customer_id.isin(customers.id).all()
 ```
 
 ## How it works

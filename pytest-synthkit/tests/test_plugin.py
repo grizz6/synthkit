@@ -63,3 +63,28 @@ def test_synth_frame_is_deterministic_given_same_seed(pytester):
 
     result = pytester.runpytest()
     result.assert_outcomes(passed=1)
+
+
+def test_synth_frame_draws_foreign_keys_from_a_parent_fixture(pytester):
+    # Child rows should join to the parent fixture's ids, not to whatever ids the real data
+    # happened to contain when the child profile was fit.
+    customers_path = pytester.path / "customers.json"
+    sk.fit(pd.DataFrame({"id": range(1, 101), "age": [30, 40, 50, 60] * 25})).save(customers_path)
+    orders = pd.DataFrame({"customer_id": [1, 2, 3, 4] * 25, "total": [9.5, 20.0] * 50})
+    orders_path = pytester.path / "orders.json"
+    sk.fit(orders, constraints=[sk.ForeignKey("customer_id", "customers.id")]).save(orders_path)
+
+    pytester.makepyfile(
+        f"""
+        def test_orders_join_to_customers(synth_frame):
+            customers = synth_frame({str(customers_path)!r}, n=20, seed=0)
+            pool = customers["id"].tolist()
+            orders = synth_frame(
+                {str(orders_path)!r}, n=200, seed=0, key_pools={{"customer_id": pool}}
+            )
+            assert set(orders["customer_id"]) <= set(pool)
+        """
+    )
+
+    result = pytester.runpytest()
+    result.assert_outcomes(passed=1)
