@@ -3,10 +3,11 @@ import re
 
 import numpy as np
 import pandas as pd
+import pytest
 from typer.testing import CliRunner
 
 from synthkit import __version__
-from synthkit.cli import app
+from synthkit.cli import _split_file_column, app
 from synthkit.profile import Profile
 
 runner = CliRunner()
@@ -1010,3 +1011,25 @@ def test_check_without_explain_stays_quiet_about_attribution(tmp_path):
 
     assert "identifying_matches:" in result.output
     assert "remaining if each column were dropped" not in result.output
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("customers.csv:id", ("customers.csv", "id")),
+        ("data/customers.csv:id", ("data/customers.csv", "id")),
+        (r"C:\data\customers.csv:id", (r"C:\data\customers.csv", "id")),
+        ("C:/data/customers.csv:id", ("C:/data/customers.csv", "id")),
+        (r"C:\data\customers.csv", None),
+        ("C:/data/customers.csv", None),
+        ("customers.csv", None),
+        ("customers.csv:", None),
+        (":id", None),
+    ],
+)
+def test_split_file_column_treats_a_drive_letter_colon_as_part_of_the_path(source, expected):
+    # Regression test: on Windows, C:\...\customers.csv with no column was split on the drive
+    # letter's colon into file "C" and column "\...\customers.csv", so the user got "file does
+    # not exist: C" instead of being told the column was missing. Run on every OS, not only in
+    # Windows CI, since the parsing is pure string handling.
+    assert _split_file_column(source) == expected

@@ -121,12 +121,24 @@ def fit(
             typer.echo(f"self-check skipped: {e}", err=True)
 
 
-def _parse_key_pools(specs: list[str]) -> dict[str, list[Any]]:
-    """Parse repeated `--key-pool name=file:column` flags into emit()'s key_pools dict.
+def _split_file_column(source: str) -> tuple[str, str] | None:
+    """Split FILE:COLUMN on its last colon, or return None when there's no column.
 
-    Split on the last colon rather than the first, so a Windows path like C:\\data\\x.csv:id
-    still resolves to the right file and column.
+    Splitting on the last colon rather than the first keeps a Windows path like
+    C:\\data\\x.csv:id intact. When the only colon belongs to a drive letter (C:\\data\\x.csv),
+    the column is missing; the file is not "C".
     """
+    path_text, colon, column = source.rpartition(":")
+    if not colon or not path_text or not column:
+        return None
+    is_drive_letter = len(path_text) == 1 and path_text.isalpha() and column[0] in "\\/"
+    if is_drive_letter:
+        return None
+    return path_text, column
+
+
+def _parse_key_pools(specs: list[str]) -> dict[str, list[Any]]:
+    """Parse repeated `--key-pool name=file:column` flags into emit()'s key_pools dict."""
     pools: dict[str, list[Any]] = {}
 
     for spec in specs:
@@ -137,9 +149,10 @@ def _parse_key_pools(specs: list[str]) -> dict[str, list[Any]]:
                 "(e.g. --key-pool customer_id=customers.parquet:id)"
             )
 
-        path_text, colon, column = source.rpartition(":")
-        if not colon or not path_text or not column:
+        split = _split_file_column(source)
+        if split is None:
             raise typer.BadParameter(f"expected FILE:COLUMN after '=', got {source!r} for {name!r}")
+        path_text, column = split
 
         path = Path(path_text)
         if not path.is_file():
