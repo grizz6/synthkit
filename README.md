@@ -11,7 +11,7 @@ synthkit is a Python library and CLI that learns the statistical shape of a real
 - **Measures privacy instead of assuming it:** `check` compares synthetic-to-real distances against a real holdout and can name the column that makes records identifiable.
 - **Fits into a workflow:** a pytest fixture plugin, deterministic seeds, drift detection against fresh production data, and a readable `compare` for reviewing re-fitted profiles in PRs.
 
-**Status:** pre-alpha (`0.0.1`), not yet on PyPI. 373 tests; CI runs pytest on Linux, macOS, and Windows with Python 3.10–3.13, plus ruff and mypy. Worked examples use the Adult Census, Titanic, Wine Quality, and Bike Sharing datasets (`examples/`).
+**Status:** pre-alpha (`0.0.1`), not yet on PyPI. 385 tests; CI runs pytest on Linux, macOS, and Windows with Python 3.10–3.13, plus ruff and mypy. Worked examples use the Adult Census, Titanic, Wine Quality, and Bike Sharing datasets (`examples/`).
 
 ## The problem
 
