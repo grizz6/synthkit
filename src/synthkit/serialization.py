@@ -3,7 +3,8 @@
 A profile is meant to be diffable in a pull request and byte-identical across a save/load
 round trip, so serialization can't rely on whatever key order and float formatting Python
 happens to produce. `canonicalize` walks a structure once, converts numpy scalars to native
-Python types, rounds floats to a fixed precision, and sorts dict keys recursively.
+Python types, rounds floats to a fixed number of significant digits, and sorts dict keys
+recursively.
 """
 
 from __future__ import annotations
@@ -14,7 +15,9 @@ from typing import Any
 
 import numpy as np
 
-FLOAT_PRECISION = 12
+# Significant digits, not decimal places: a fixed count of decimal places rounds a column
+# measured around 1e-13 down to zero. 15 is the most a float64 always round-trips exactly.
+FLOAT_SIGNIFICANT_DIGITS = 15
 
 
 def canonicalize(value: Any) -> Any:
@@ -24,7 +27,7 @@ def canonicalize(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return [canonicalize(v) for v in value]
     if isinstance(value, (np.floating, float)):
-        return round(float(value), FLOAT_PRECISION)
+        return float(f"{float(value):.{FLOAT_SIGNIFICANT_DIGITS}g}")
     if isinstance(value, (np.integer,)):
         return int(value)
     if isinstance(value, (np.bool_,)):

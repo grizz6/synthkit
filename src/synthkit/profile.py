@@ -206,7 +206,7 @@ class Profile:
                     f"dataframe: {missing}"
                 )
 
-        return cls(
+        profile = cls(
             columns=columns,
             column_types=stored_types,
             marginals=marginals,
@@ -217,6 +217,9 @@ class Profile:
             n_rows_fit=len(df),
             constraints=constraints_to_dicts(parsed_constraints),
         )
+        # Pass the result through the same canonical JSON that save() writes, so a profile
+        # emits identical rows whether it came straight from fit() or was loaded from disk.
+        return cls.from_dict(json.loads(serialization.dumps(profile.to_dict())))
 
     def emit(
         self,

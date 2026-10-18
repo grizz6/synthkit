@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from synthkit.serialization import canonicalize, dump, dumps, load
 
@@ -17,10 +18,26 @@ def test_canonicalize_converts_numpy_scalars():
     assert isinstance(result["z"], bool)
 
 
-def test_canonicalize_rounds_floats():
+def test_canonicalize_rounds_floats_to_significant_digits():
     data = {"x": 1.0 / 3.0}
     result = canonicalize(data)
-    assert result["x"] == round(1.0 / 3.0, 12)
+    assert result["x"] == float(f"{1.0 / 3.0:.15g}")
+    # Float noise from arithmetic is rounded away, so the same value always writes the same.
+    assert canonicalize(0.1 + 0.2) == 0.3
+
+
+@pytest.mark.parametrize("scale", [1e-15, 1e-9, 1.0, 1e9, 1e18])
+def test_canonicalize_keeps_relative_precision_at_any_scale(scale):
+    # Regression test: floats were rounded to 12 decimal places, so a value like 3e-13 became
+    # 0.0 and a column measured on that scale collapsed to a handful of distinct values.
+    value = scale * 1.234567890123
+    assert canonicalize(value) == pytest.approx(value, rel=1e-14, abs=0)
+
+
+def test_canonicalize_passes_non_finite_floats_through():
+    assert canonicalize(float("inf")) == float("inf")
+    assert canonicalize(float("-inf")) == float("-inf")
+    assert np.isnan(canonicalize(float("nan")))
 
 
 def test_canonicalize_handles_nested_arrays():

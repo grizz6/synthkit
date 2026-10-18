@@ -512,3 +512,30 @@ def test_every_declared_constraint_holds_on_emitted_rows(seed):
     assert (synthetic["subtotal"] <= synthetic["cap"]).all()
     np.testing.assert_allclose(synthetic["total"], synthetic["subtotal"] + synthetic["tax"])
     assert not synthetic.duplicated(["region", "store"]).any()
+
+
+def test_a_fitted_profile_emits_the_same_rows_before_and_after_a_save(tmp_path):
+    # Regression test: save() rounded floats but the in-memory profile kept full precision, so
+    # fixtures emitted right after fit() differed from fixtures emitted from the committed file.
+    df = make_correlated_df(n=500)
+    profile = Profile.fit(df)
+    path = tmp_path / "profile.json"
+    profile.save(path)
+
+    pd.testing.assert_frame_equal(
+        profile.emit(n=200, seed=3), Profile.load(path).emit(n=200, seed=3), check_exact=True
+    )
+
+
+def test_a_tiny_scale_continuous_column_survives_a_save_and_load(tmp_path):
+    # Regression test: values around 1e-13 were rounded to 12 decimal places on save, so the
+    # loaded profile emitted a handful of distinct values with several times the real spread.
+    rng = np.random.default_rng(0)
+    df = pd.DataFrame({"x": rng.normal(5, 1, 500) * 1e-13})
+    path = tmp_path / "profile.json"
+    Profile.fit(df).save(path)
+
+    synthetic = Profile.load(path).emit(n=500, seed=0)
+
+    assert synthetic["x"].nunique() > 400
+    assert synthetic["x"].std() == pytest.approx(df["x"].std(), rel=0.2)
