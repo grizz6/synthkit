@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 from synthkit.drift import DEFAULT_DRIFT_THRESHOLD, compute_drift
 from synthkit.profile import Profile
@@ -296,3 +297,81 @@ def test_identifier_and_text_columns_are_unscored_without_counting_as_schema_dri
     assert report.missing_columns == []
     assert report.new_columns == []
     assert report.passed
+
+
+def test_categorical_drift_is_zero_when_current_column_is_all_null():
+    # Regression test: numeric, datetime, and boolean value drift were already 0.0 for an
+    # all-null column (there are no values to compare), but categorical came out as 0.5 and
+    # failed diff on its own. Null-rate drift now reports that case for every type alike.
+    rng = np.random.default_rng(0)
+    df = pd.DataFrame({"plan": rng.choice(["free", "pro"], size=500)})
+    profile = Profile.fit(df)
+    fresh = pd.DataFrame({"plan": [None] * 100})
+    report = compute_drift(profile, fresh)
+    assert report.column_drift["plan"] == 0.0
+
+
+@pytest.mark.parametrize(
+    ("column", "values"),
+    [
+        ("amount", lambda rng: rng.normal(100, 20, 500)),
+        ("plan", lambda rng: rng.choice(["free", "pro"], size=500)),
+        ("is_active", lambda rng: rng.choice([True, False], size=500)),
+    ],
+)
+def test_a_column_that_went_all_null_fails_on_null_rate(column, values):
+    rng = np.random.default_rng(0)
+    profile = Profile.fit(pd.DataFrame({column: values(rng)}))
+    fresh = pd.DataFrame({column: [None] * 100})
+
+    report = compute_drift(profile, fresh)
+
+    assert report.null_rate_drift[column] == pytest.approx(1.0)
+    assert report.null_drifted_columns == [column]
+    assert not report.passed
+
+
+def test_a_shifted_null_rate_is_reported_as_the_absolute_change():
+    rng = np.random.default_rng(0)
+    amount = pd.Series(rng.normal(100, 20, 1000))
+    profile = Profile.fit(pd.DataFrame({"amount": amount.mask(rng.random(1000) < 0.1)}))
+    fresh = pd.DataFrame({"amount": amount.mask(rng.random(1000) < 0.5)})
+
+    report = compute_drift(profile, fresh)
+
+    assert report.null_rate_drift["amount"] == pytest.approx(0.4, abs=0.05)
+    assert report.null_drifted_columns == ["amount"]
+
+
+def test_a_stable_null_rate_passes():
+    rng = np.random.default_rng(0)
+    amount = pd.Series(rng.normal(100, 20, 2000))
+    profile = Profile.fit(pd.DataFrame({"amount": amount[:1000].mask(rng.random(1000) < 0.2)}))
+    fresh = pd.DataFrame(
+        {"amount": amount[1000:].reset_index(drop=True).mask(rng.random(1000) < 0.2)}
+    )
+
+    report = compute_drift(profile, fresh)
+
+    assert report.null_rate_drift["amount"] < 0.05
+    assert report.null_drifted_columns == []
+    assert report.passed
+
+
+def test_null_rate_drift_is_skipped_for_an_empty_frame():
+    # Zero rows have no null rate at all, so there is nothing to compare.
+    rng = np.random.default_rng(0)
+    df = pd.DataFrame({"amount": rng.normal(100, 20, 500)})
+    report = compute_drift(Profile.fit(df), df.head(0))
+    assert report.null_rate_drift == {}
+
+
+def test_a_column_that_stopped_being_all_null_fails_on_null_rate():
+    df = pd.DataFrame({"legacy": [None] * 200, "amount": np.arange(200.0)})
+    profile = Profile.fit(df)
+    fresh = df.assign(legacy=np.arange(200.0))
+
+    report = compute_drift(profile, fresh)
+
+    assert report.null_rate_drift["legacy"] == pytest.approx(1.0)
+    assert "legacy" in report.null_drifted_columns

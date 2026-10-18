@@ -8,7 +8,7 @@ categorical/boolean ones, and reports which columns moved past a threshold.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
@@ -52,7 +52,10 @@ def _datetime_drift(marginal_dict: dict[str, Any], current: pd.Series) -> float:
 def _categorical_drift(marginal_dict: dict[str, Any], current: pd.Series) -> float:
     marginal = CategoricalMarginal.from_dict(marginal_dict)
     reference_probs = dict(zip(marginal.categories, marginal.probabilities, strict=True))
-    raw_current_probs = current.dropna().astype(str).value_counts(normalize=True).to_dict()
+    clean = current.dropna()
+    if clean.empty:
+        return 0.0
+    raw_current_probs = clean.astype(str).value_counts(normalize=True).to_dict()
 
     if OTHER_CATEGORY in reference_probs:
         # Fold any category the profile doesn't recognize into __other__ too, so it isn't
@@ -95,6 +98,10 @@ class DriftReport:
     passed: bool
     missing_columns: list[str]
     new_columns: list[str]
+    # Absolute change in each column's null rate. Value drift ignores nulls (it compares the
+    # values that are present), so this is the only signal that a column went mostly null.
+    null_rate_drift: dict[str, float] = field(default_factory=dict)
+    null_drifted_columns: list[str] = field(default_factory=list)
 
     @property
     def max_drift(self) -> float:
@@ -110,19 +117,26 @@ def compute_drift(
 ) -> DriftReport:
     """Compare fresh data against the profile fixtures are built on.
 
-    Reports two independent kinds of drift. Distribution drift is a column the profile still
-    knows whose values have moved. Schema drift is the column set itself changing, which
-    matters more: a column the profile models but production has dropped means fixtures
-    generate something real data no longer has, and a column production has gained means
-    fixtures are missing it entirely. Either one breaks tests in ways that look unrelated to
-    the change that caused them, so both fail the check rather than being skipped quietly.
+    Reports three independent kinds of drift. Distribution drift is a column the profile still
+    knows whose values have moved. Null-rate drift is one whose share of nulls has moved, by
+    more than the same threshold in absolute terms. Schema drift is the column set itself
+    changing, which matters more: a column the profile models but production has dropped
+    means fixtures generate something real data no longer has, and a column production has
+    gained means fixtures are missing it entirely. Either one breaks tests in ways that look
+    unrelated to the change that caused them, so both fail the check rather than being
+    skipped quietly.
     """
     current_columns = set(current.columns.astype(str))
     column_drift: dict[str, float] = {}
+    null_rate_drift: dict[str, float] = {}
 
     for column in profile.columns:
         if column not in current_columns:
             continue
+
+        if len(current):
+            current_rate = float(current[column].isna().mean())
+            null_rate_drift[column] = abs(current_rate - profile.null_rate(column))
 
         ctype = profile.column_types[column]
         if ctype == ALL_NULL_KIND or ctype not in _DRIFT_FUNCTIONS:
@@ -132,13 +146,16 @@ def compute_drift(
         column_drift[column] = _DRIFT_FUNCTIONS[ctype](marginal_dict, current[column])
 
     drifted = [c for c, score in column_drift.items() if score > threshold]
+    null_drifted = [c for c, score in null_rate_drift.items() if score > threshold]
     missing = [c for c in profile.columns if c not in current_columns]
     new = [str(c) for c in current.columns if str(c) not in set(profile.columns)]
 
     return DriftReport(
         column_drift=column_drift,
         drifted_columns=drifted,
-        passed=not drifted and not missing and not new,
+        passed=not drifted and not null_drifted and not missing and not new,
         missing_columns=missing,
         new_columns=new,
+        null_rate_drift=null_rate_drift,
+        null_drifted_columns=null_drifted,
     )

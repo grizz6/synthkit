@@ -221,6 +221,23 @@ class Profile:
         # emits identical rows whether it came straight from fit() or was loaded from disk.
         return cls.from_dict(json.loads(serialization.dumps(profile.to_dict())))
 
+    def null_rate(self, column: str) -> float:
+        """The fraction of fit rows where `column` was null, read from the joint null model."""
+        columns = self.null_model.get("columns", [])
+        if column not in columns:
+            return 0.0
+
+        index = columns.index(column)
+        patterns = self.null_model["patterns"]
+        probabilities = self.null_model["probabilities"]
+        return float(
+            sum(
+                prob
+                for pattern, prob in zip(patterns, probabilities, strict=True)
+                if pattern[index]
+            )
+        )
+
     def emit(
         self,
         n: int,

@@ -93,7 +93,8 @@ synthkit check fixtures/customers.parquet --profile profiles/customers.json \
     --real data/customers.parquet --explain
 
 # has production drifted away from the profile your fixtures are built on?
-# fails on a shifted distribution or a changed schema (a column added or dropped)
+# fails on a shifted distribution, a shifted null rate, or a changed schema (a column
+# added or dropped)
 synthkit diff profiles/customers.json data/customers_2026Q3.parquet
 
 # what's actually in a committed profile, without writing code to find out

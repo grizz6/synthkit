@@ -365,6 +365,8 @@ def diff(
             "threshold": threshold,
             "column_drift": report.column_drift,
             "drifted_columns": report.drifted_columns,
+            "null_rate_drift": report.null_rate_drift,
+            "null_drifted_columns": report.null_drifted_columns,
             "missing_columns": report.missing_columns,
             "new_columns": report.new_columns,
         }
@@ -377,6 +379,11 @@ def diff(
         flag = " DRIFTED" if column in report.drifted_columns else ""
         typer.echo(f"{column}: {score:.3f}{flag}")
 
+    for column in report.null_drifted_columns:
+        was = profile_obj.null_rate(column)
+        now = float(df[column].isna().mean())
+        typer.echo(f"{column}: null rate {was:.1%} -> {now:.1%} NULL RATE DRIFTED")
+
     if report.missing_columns:
         typer.echo(f"MISSING from the data: {', '.join(report.missing_columns)}")
     if report.new_columns:
@@ -386,6 +393,10 @@ def diff(
         reasons = []
         if report.drifted_columns:
             reasons.append(f"{len(report.drifted_columns)} column(s) drifted past {threshold}")
+        if report.null_drifted_columns:
+            reasons.append(
+                f"{len(report.null_drifted_columns)} null rate(s) moved more than {threshold}"
+            )
         if report.schema_changed:
             reasons.append(
                 f"schema changed ({len(report.missing_columns)} missing, "

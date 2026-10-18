@@ -40,16 +40,10 @@ class ColumnSummary:
 
 
 def _null_rate(profile: Profile, column: str) -> float | None:
-    columns = profile.null_model.get("columns", [])
-    if column not in columns:
+    # None rather than 0.0 when the column never had a null, so a summary can say so.
+    if column not in profile.null_model.get("columns", []):
         return None
-
-    index = columns.index(column)
-    patterns = profile.null_model["patterns"]
-    probabilities = profile.null_model["probabilities"]
-    return sum(
-        prob for pattern, prob in zip(patterns, probabilities, strict=True) if pattern[index]
-    )
+    return profile.null_rate(column)
 
 
 def _describe(marginal_dict: dict) -> str:

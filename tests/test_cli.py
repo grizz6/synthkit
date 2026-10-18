@@ -1136,3 +1136,39 @@ def test_diff_json_reports_a_pass_with_exit_code_zero(tmp_path):
     report = json.loads(result.stdout)
     assert report["passed"] is True
     assert report["drifted_columns"] == []
+
+
+def _fit_then_null_out_amount(tmp_path):
+    data_path = tmp_path / "data.csv"
+    make_df(seed=0).to_csv(data_path, index=False)
+    profile_path = tmp_path / "profile.json"
+    runner.invoke(app, ["fit", str(data_path), "-o", str(profile_path)])
+
+    nulled = make_df(seed=1)
+    nulled["amount"] = None
+    nulled_path = tmp_path / "nulled.csv"
+    nulled.to_csv(nulled_path, index=False)
+    return profile_path, nulled_path
+
+
+def test_diff_fails_when_a_column_went_all_null(tmp_path):
+    # Value drift compares only the values present, so a column that production stopped
+    # filling in used to pass diff outright.
+    profile_path, nulled_path = _fit_then_null_out_amount(tmp_path)
+
+    result = runner.invoke(app, ["diff", str(profile_path), str(nulled_path)])
+
+    assert result.exit_code == 1
+    assert "amount: null rate 0.0% -> 100.0% NULL RATE DRIFTED" in result.output
+    assert "1 null rate(s) moved more than 0.1" in result.output
+
+
+def test_diff_json_reports_null_rate_drift(tmp_path):
+    profile_path, nulled_path = _fit_then_null_out_amount(tmp_path)
+
+    result = runner.invoke(app, ["diff", str(profile_path), str(nulled_path), "--json"])
+
+    assert result.exit_code == 1
+    report = json.loads(result.stdout)
+    assert report["null_drifted_columns"] == ["amount"]
+    assert report["null_rate_drift"]["amount"] == 1.0
