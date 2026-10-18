@@ -1051,7 +1051,7 @@ def test_check_json_reports_a_failure_and_still_exits_nonzero(tmp_path):
     report = json.loads(result.stdout)
     assert report["passed"] is False
     assert report["identifying_matches"] > 0
-    assert report["min_dcr_ratio"] == 1.0
+    assert report["min_dcr_ratio"] == 0.9
     assert set(report) == {
         "passed",
         "dcr_ratio",
@@ -1208,3 +1208,11 @@ def test_diff_reports_an_unreadable_data_file_without_a_traceback(tmp_path):
 
     assert result.exit_code == 1
     assert "fresh.csv is empty" in result.output
+
+
+def test_check_uses_the_shared_default_min_dcr_ratio(tmp_path):
+    data_path, profile_path = _leaky_dataset(tmp_path)
+
+    result = runner.invoke(app, _check_args(data_path, profile_path, data_path, "--json"))
+
+    assert json.loads(result.stdout)["min_dcr_ratio"] == 0.9

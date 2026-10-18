@@ -79,7 +79,7 @@ def check(
     profile: Profile,
     real: pd.DataFrame,
     holdout_fraction: float = 0.2,
-    min_dcr_ratio: float = 1.0,
+    min_dcr_ratio: float = _privacy.DEFAULT_MIN_DCR_RATIO,
     seed: int = 0,
 ) -> CheckReport:
     privacy_report = _privacy.check(

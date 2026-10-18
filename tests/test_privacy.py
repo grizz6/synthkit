@@ -368,3 +368,32 @@ def test_explain_on_a_single_column_reports_the_count_with_nothing_left():
     # definition rather than an error.
     real = pd.DataFrame({"a": ["x", "y", "z"]})
     assert explain_identifying_matches(real, real, ["a"]) == {"a": 0}
+
+
+def test_every_entry_point_shares_the_same_default_min_dcr_ratio():
+    # The default lives in one constant; check() in privacy and in the top-level API both
+    # read it, so the CLI, the Python API, and the library cannot disagree about it.
+    import inspect
+
+    import synthkit as sk
+    from synthkit.privacy import DEFAULT_MIN_DCR_RATIO
+
+    assert DEFAULT_MIN_DCR_RATIO == 0.9
+    for function in (check, sk.check):
+        default = inspect.signature(function).parameters["min_dcr_ratio"].default
+        assert default == DEFAULT_MIN_DCR_RATIO
+
+
+def test_a_ratio_just_under_one_passes_by_default(monkeypatch):
+    # Regression test: a default of 1.0 failed a healthy generator whose ratio landed just
+    # under it from sampling noise alone.
+    from synthkit import privacy
+
+    df = pd.DataFrame({"a": np.arange(100.0)})
+    distances = iter([np.full(100, 0.95), np.full(20, 1.0)])
+    monkeypatch.setattr(privacy, "distance_to_closest_record", lambda *args: next(distances))
+
+    report = check(df, df.assign(a=df["a"] + 1000), {"a": "continuous"})
+
+    assert report.dcr_ratio == pytest.approx(0.95)
+    assert report.passed

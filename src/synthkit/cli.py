@@ -20,7 +20,7 @@ from synthkit.constraints import describe_constraint, parse_constraints
 from synthkit.drift import DEFAULT_DRIFT_THRESHOLD, compute_drift
 from synthkit.inspect import compare_profiles, summarize_profile
 from synthkit.io import read_table, write_table
-from synthkit.privacy import DEFAULT_RARE_COMBINATION_THRESHOLD
+from synthkit.privacy import DEFAULT_MIN_DCR_RATIO, DEFAULT_RARE_COMBINATION_THRESHOLD
 from synthkit.profile import Profile
 from synthkit.types import ColumnType
 
@@ -263,7 +263,9 @@ def check(
         help="The original real dataset, for the DCR baseline.",
     ),
     min_dcr_ratio: float = typer.Option(
-        1.0, "--min-dcr-ratio", help="Minimum acceptable synthetic/holdout DCR ratio."
+        DEFAULT_MIN_DCR_RATIO,
+        "--min-dcr-ratio",
+        help="Minimum acceptable synthetic/holdout DCR ratio.",
     ),
     holdout_fraction: float = typer.Option(0.2, "--holdout-fraction"),
     rare_combination_threshold: int = typer.Option(
