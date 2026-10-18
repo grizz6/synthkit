@@ -67,6 +67,10 @@ class NumericMarginal:
         values = np.interp(u, self.quantile_levels, self.quantile_values)
         if self.is_integer:
             values = np.round(values)
+            # Hand back whole numbers as integers, the way the real column held them. Values
+            # that int64 can't hold (+-inf, or magnitudes past 2**63) stay float.
+            if np.isfinite(values).all() and np.abs(values).max(initial=0.0) < 2.0**63:
+                values = values.astype(np.int64)
         return values
 
     def to_dict(self) -> dict[str, Any]:

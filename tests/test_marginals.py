@@ -94,3 +94,17 @@ def test_numeric_marginal_handles_infinity_on_both_ends_without_nan():
     assert not any(np.isnan(v) for v in marginal.quantile_values)
     sampled = marginal.sample(np.linspace(0, 1, 1000))
     assert not np.isnan(sampled).any()
+
+
+def test_integer_marginal_samples_integers():
+    marginal = NumericMarginal.fit(pd.Series([1, 2, 3, 4, 5] * 20))
+    sampled = marginal.sample(np.linspace(0, 1, 50))
+    assert sampled.dtype == np.int64
+
+
+def test_integer_marginal_with_infinity_stays_float():
+    # Infinity has no integer form, so a whole-number column holding it keeps float values.
+    marginal = NumericMarginal.fit(pd.Series([1.0, 2.0, 3.0, np.inf] * 20))
+    sampled = marginal.sample(np.linspace(0, 1, 50))
+    assert sampled.dtype == np.float64
+    assert not np.isnan(sampled).any()

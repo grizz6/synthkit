@@ -425,6 +425,10 @@ def test_large_finite_values_do_not_overflow_to_infinity_on_emit():
 
     synthetic = Profile.fit(pd.DataFrame({"a": values})).emit(n=50, seed=0)
     assert np.isfinite(synthetic["a"]).all()
+    # Values this large are whole numbers but don't fit in int64, so they must stay float
+    # rather than wrap around to garbage in an integer cast.
+    assert synthetic["a"].dtype == np.float64
+    assert synthetic["a"].abs().min() > 1e90
 
 
 def test_column_names_colliding_only_after_string_coercion_are_rejected():
@@ -539,3 +543,23 @@ def test_a_tiny_scale_continuous_column_survives_a_save_and_load(tmp_path):
 
     assert synthetic["x"].nunique() > 400
     assert synthetic["x"].std() == pytest.approx(df["x"].std(), rel=0.2)
+
+
+def test_an_integer_column_is_emitted_as_integers():
+    # Regression test: discrete columns were rounded but left as float64, so a fixture's age
+    # came out as 39.0 where the real data had 39, and `df.age.dtype == int` failed in tests.
+    rng = np.random.default_rng(0)
+    df = pd.DataFrame({"age": rng.integers(18, 90, 500), "score": rng.normal(size=500)})
+    synthetic = Profile.fit(df).emit(n=200, seed=0)
+    assert synthetic["age"].dtype == np.int64
+    assert synthetic["score"].dtype == np.float64
+
+
+def test_an_integer_column_with_nulls_is_emitted_like_pandas_reads_it():
+    # pandas holds an integer column with missing values as float64, and so does emit().
+    rng = np.random.default_rng(0)
+    age = pd.Series(rng.integers(18, 90, 500)).astype(float)
+    age[rng.random(500) < 0.3] = np.nan
+    synthetic = Profile.fit(pd.DataFrame({"age": age})).emit(n=200, seed=0)
+    assert synthetic["age"].isna().any()
+    assert (synthetic["age"].dropna() == synthetic["age"].dropna().round()).all()
