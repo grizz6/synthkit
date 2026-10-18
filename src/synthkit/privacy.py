@@ -27,6 +27,23 @@ DEFAULT_RARE_COMBINATION_THRESHOLD = 5
 DEFAULT_MIN_DCR_RATIO = 0.9
 
 
+def _comparable_text(values: pd.Series) -> pd.Series:
+    """`values` as text that compares equal exactly when the values themselves are equal.
+
+    Matching happens on text so that mixed-type columns compare at all, but a plain
+    astype(str) turns the same number into different strings across dtypes: emit() returns a
+    discrete column as float64 (39.0) while the real data holds int64 (39), so a synthetic copy
+    of a real row never matched it. Numbers go through float first; text stays as written.
+    """
+    if pd.api.types.is_numeric_dtype(values) and not pd.api.types.is_bool_dtype(values):
+        return values.astype("float64").astype(str)
+    return values.astype(str)
+
+
+def _comparable_rows(frame: pd.DataFrame) -> pd.DataFrame:
+    return frame.apply(_comparable_text)
+
+
 def _finite_range(combined: np.ndarray) -> float:
     """Max minus min of `combined`, ignoring NaN/+-inf, falling back to 1.0 when that's not
     computable."""
@@ -58,8 +75,8 @@ def _column_distance(
         with np.errstate(invalid="ignore"):
             dist = np.abs(q[:, None] - r[None, :]) / value_range
     else:
-        q = query.astype(str).to_numpy()
-        r = reference.astype(str).to_numpy()
+        q = _comparable_text(query).to_numpy()
+        r = _comparable_text(reference).to_numpy()
         dist = (q[:, None] != r[None, :]).astype(float)
 
     # Gower distance for a single column should live in [0, 1]; clamp so a stray +-inf value
@@ -168,8 +185,8 @@ def count_exact_matches(
     if columns is not None:
         synthetic, real = synthetic[columns], real[columns]
 
-    real_rows = set(map(tuple, real.astype(str).to_numpy()))
-    synthetic_rows = map(tuple, synthetic.astype(str).to_numpy())
+    real_rows = set(map(tuple, _comparable_rows(real).to_numpy()))
+    synthetic_rows = map(tuple, _comparable_rows(synthetic).to_numpy())
     return sum(1 for row in synthetic_rows if row in real_rows)
 
 
@@ -179,9 +196,9 @@ def _rare_combination_leak_mask(
     columns: list[str],
     threshold: int,
 ) -> np.ndarray:
-    real_counts = real[columns].astype(str).value_counts()
+    real_counts = _comparable_rows(real[columns]).value_counts()
     rare_combinations = set(real_counts[real_counts < threshold].index)
-    synthetic_combinations = list(map(tuple, synthetic[columns].astype(str).to_numpy()))
+    synthetic_combinations = list(map(tuple, _comparable_rows(synthetic[columns]).to_numpy()))
     return np.array([combo in rare_combinations for combo in synthetic_combinations])
 
 
@@ -219,9 +236,9 @@ def count_identifying_matches(
     if not columns:
         return 0
 
-    real_counts = real[columns].astype(str).value_counts()
+    real_counts = _comparable_rows(real[columns]).value_counts()
     rare_rows = {row for row, count in real_counts.items() if count < threshold}
-    synthetic_rows = map(tuple, synthetic[columns].astype(str).to_numpy())
+    synthetic_rows = map(tuple, _comparable_rows(synthetic[columns]).to_numpy())
     return sum(1 for row in synthetic_rows if row in rare_rows)
 
 

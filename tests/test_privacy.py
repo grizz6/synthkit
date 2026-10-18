@@ -4,6 +4,7 @@ import pytest
 
 from synthkit.privacy import (
     DEFAULT_MIN_DCR_RATIO,
+    _column_distance,
     _finite_range,
     check,
     compute_value_ranges,
@@ -447,3 +448,61 @@ def test_copying_real_rows_still_fails_on_duplicate_heavy_data():
     report = check(real, real, {"a": "continuous", "b": "continuous"})
     assert report.dcr_ratio < DEFAULT_MIN_DCR_RATIO
     assert not report.passed
+
+
+def _real_integers_and_their_float_copy():
+    # A discrete column comes out of emit() as float64 (39.0) while the real data holds int64
+    # (39). Comparing the two as text, "39.0" never equals "39".
+    rng = np.random.default_rng(0)
+    real = pd.DataFrame(
+        {"age": rng.integers(18, 90, 300), "hours": rng.integers(1, 99, 300), "plan": "a"}
+    )
+    return real, real.astype({"age": float, "hours": float})
+
+
+def test_exact_matches_count_an_integer_row_reproduced_as_floats():
+    # Regression test: on UCI Adult Census, 6,818 of 10,000 synthetic rows equalled a real row
+    # value for value, and count_exact_matches reported 0.
+    real, copied = _real_integers_and_their_float_copy()
+    assert count_exact_matches(copied, real) == len(real)
+
+
+def test_identifying_matches_count_an_integer_row_reproduced_as_floats():
+    real, copied = _real_integers_and_their_float_copy()
+    columns = list(real.columns)
+    assert count_identifying_matches(copied, real, columns) == count_identifying_matches(
+        real, real, columns
+    )
+    assert count_identifying_matches(copied, real, columns) > 0
+
+
+def test_rare_combination_leaks_count_integers_reproduced_as_floats():
+    real, copied = _real_integers_and_their_float_copy()
+    assert count_rare_combination_leaks(copied, real, ["age", "hours"]) == (
+        count_rare_combination_leaks(real, real, ["age", "hours"])
+    )
+
+
+def test_check_fails_a_float_copy_of_integer_real_data():
+    # End to end: a "synthetic" frame that copies every real row must fail, whatever dtype the
+    # copy happens to carry.
+    real, copied = _real_integers_and_their_float_copy()
+    column_types = {"age": "discrete", "hours": "discrete", "plan": "categorical"}
+    report = check(copied, real, column_types, min_dcr_ratio=0.0)
+    assert report.exact_matches == len(real)
+    assert report.identifying_matches > 0
+    assert not report.passed
+
+
+def test_categorical_distance_treats_an_integer_and_its_float_as_equal():
+    query = pd.Series([1.0, 2.0])
+    reference = pd.Series([1, 3])
+    distances = _column_distance(query, reference, "categorical")
+    assert distances[0, 0] == 0.0
+    assert distances[1, 1] == 1.0
+
+
+def test_text_values_are_still_compared_exactly():
+    real = pd.DataFrame({"code": ["1", "01", "1.0"]})
+    synthetic = pd.DataFrame({"code": ["1"]})
+    assert count_exact_matches(synthetic, real) == 1
