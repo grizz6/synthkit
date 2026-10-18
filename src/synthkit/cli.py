@@ -314,6 +314,7 @@ def check(
         payload: dict[str, Any] = {
             "passed": report.passed,
             "dcr_ratio": report.dcr_ratio,
+            "dcr_statistic": report.dcr_statistic,
             "min_dcr_ratio": min_dcr_ratio,
             "exact_matches": report.exact_matches,
             "identifying_matches": report.identifying_matches,
@@ -327,6 +328,10 @@ def check(
         return
 
     typer.echo(f"dcr_ratio: {report.dcr_ratio:.3f} (min {min_dcr_ratio})")
+    if report.dcr_statistic == "mean":
+        typer.echo("  compared mean distances: duplicate real rows put the percentile at 0")
+    elif report.dcr_statistic == "none":
+        typer.echo("  no baseline: every holdout row duplicates a training row")
     typer.echo(f"exact_matches: {report.exact_matches}")
     # The verdict turns on this one, not the raw count above: on a low-entropy dataset every
     # synthetic row necessarily reproduces some real one without identifying anybody.

@@ -3,6 +3,7 @@ import pandas as pd
 import pytest
 
 from synthkit.privacy import (
+    DEFAULT_MIN_DCR_RATIO,
     _finite_range,
     check,
     compute_value_ranges,
@@ -231,6 +232,8 @@ def test_dcr_ratio_is_neutral_when_holdout_baseline_is_degenerately_zero():
     # a dataset this duplicate-heavy reports the neutral ratio rather than 0.0.
     report = check(df, df, column_types, min_dcr_ratio=0.5)
     assert report.dcr_ratio == 1.0
+    # Every holdout row repeats a training row, so even mean distances give no baseline.
+    assert report.dcr_statistic == "none"
 
 
 def test_check_rejects_single_row_real_dataset_with_a_clear_error():
@@ -397,3 +400,50 @@ def test_a_ratio_just_under_one_passes_by_default(monkeypatch):
 
     assert report.dcr_ratio == pytest.approx(0.95)
     assert report.passed
+
+
+def _duplicate_heavy_real_data(n=1000, duplicate_share=0.3, seed=0):
+    # Continuous rows where a share are exact copies of other rows, like the red wine quality
+    # dataset (about a sixth of its rows repeat another row exactly).
+    rng = np.random.default_rng(seed)
+    base = pd.DataFrame({"a": rng.normal(size=n), "b": rng.normal(size=n)})
+    copies = base.sample(frac=duplicate_share, random_state=seed)
+    return pd.concat([base, copies], ignore_index=True)
+
+
+def test_dcr_ratio_falls_back_to_mean_distance_when_the_holdout_percentile_is_zero():
+    # Regression test: when enough real rows duplicate each other, the holdout's 5th-percentile
+    # distance is 0 and the ratio divided by a 1e-9 stand-in, reporting numbers in the tens of
+    # millions on the red wine quality dataset. Mean distances give a finite, readable ratio.
+    real = _duplicate_heavy_real_data()
+    column_types = {"a": "continuous", "b": "continuous"}
+    synthetic = pd.DataFrame(
+        {
+            "a": np.random.default_rng(1).normal(size=1000),
+            "b": np.random.default_rng(2).normal(size=1000),
+        }
+    )
+
+    report = check(synthetic, real, column_types)
+
+    assert report.dcr_statistic == "mean"
+    assert 0.1 < report.dcr_ratio < 10
+
+
+def test_dcr_ratio_uses_the_percentile_when_the_holdout_baseline_is_nonzero():
+    rng = np.random.default_rng(0)
+    real = pd.DataFrame({"a": rng.normal(size=500), "b": rng.normal(size=500)})
+    synthetic = pd.DataFrame({"a": rng.normal(size=500), "b": rng.normal(size=500)})
+
+    report = check(synthetic, real, {"a": "continuous", "b": "continuous"})
+
+    assert report.dcr_statistic == "percentile"
+
+
+def test_copying_real_rows_still_fails_on_duplicate_heavy_data():
+    # The mean fallback must not let a generator that memorizes real rows through: copying
+    # the real data puts synthetic distances at 0 everywhere, below the holdout's mean.
+    real = _duplicate_heavy_real_data()
+    report = check(real, real, {"a": "continuous", "b": "continuous"})
+    assert report.dcr_ratio < DEFAULT_MIN_DCR_RATIO
+    assert not report.passed

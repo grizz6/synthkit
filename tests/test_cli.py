@@ -1055,6 +1055,7 @@ def test_check_json_reports_a_failure_and_still_exits_nonzero(tmp_path):
     assert set(report) == {
         "passed",
         "dcr_ratio",
+        "dcr_statistic",
         "min_dcr_ratio",
         "exact_matches",
         "identifying_matches",

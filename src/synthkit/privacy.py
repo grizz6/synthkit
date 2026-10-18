@@ -232,6 +232,10 @@ class PrivacyReport:
     rare_combination_leaks: int
     passed: bool
     identifying_matches: int = 0
+    # Which distances the ratio compares: "percentile" (the dcr_percentile-th, normally),
+    # "mean" when duplicate real rows put the holdout's percentile at 0, or "none" when
+    # every holdout row is a duplicate and there's no baseline at all.
+    dcr_statistic: str = "percentile"
 
 
 def check(
@@ -262,15 +266,24 @@ def check(
 
     synthetic_p = np.percentile(synthetic_dcr, dcr_percentile)
     holdout_p = np.percentile(holdout_dcr, dcr_percentile)
+    holdout_mean = float(np.mean(holdout_dcr))
 
-    if holdout_p == 0 and synthetic_p == 0:
-        # Both sides sit exactly on some training row at this percentile, which usually means
-        # the dataset doesn't have enough entropy for even real holdout rows to come out
-        # distinct, not that synthkit is memorizing. Report the neutral ratio instead of
-        # dividing by a fallback epsilon and reading as a hard failure.
-        ratio = 1.0
+    if holdout_p > 0:
+        ratio = float(synthetic_p / holdout_p)
+        dcr_statistic = "percentile"
+    elif holdout_mean > 0:
+        # Enough real rows duplicate a training row exactly (the red wine quality dataset
+        # repeats about a sixth of its rows) that the holdout's percentile is 0 and can't be
+        # divided by; dividing by a tiny stand-in reported ratios in the tens of millions.
+        # Mean distances still give a baseline, and still fail a generator that copies rows.
+        ratio = float(np.mean(synthetic_dcr) / holdout_mean)
+        dcr_statistic = "mean"
     else:
-        ratio = float(synthetic_p / (holdout_p or 1e-9))
+        # Every holdout row repeats a training row, which means the dataset doesn't have
+        # enough entropy for real rows to come out distinct, not that synthkit is memorizing.
+        # There is no baseline to compare against, so report the neutral ratio.
+        ratio = 1.0
+        dcr_statistic = "none"
 
     # Identifiers are regenerated from a detected format, never modeled from real values, so
     # they cannot match and their presence in a whole-row comparison only masks matches
@@ -309,6 +322,7 @@ def check(
         # reject correct output for having too few possible records to be identifying.
         passed=ratio >= min_dcr_ratio and identifying_matches == 0 and rare_leaks == 0,
         identifying_matches=identifying_matches,
+        dcr_statistic=dcr_statistic,
     )
 
 

@@ -72,6 +72,7 @@ class CheckReport:
     passed: bool
     ks_by_column: dict[str, float]
     identifying_matches: int = 0
+    dcr_statistic: str = "percentile"
 
 
 def check(
@@ -99,4 +100,5 @@ def check(
         passed=privacy_report.passed,
         ks_by_column=ks_by_column,
         identifying_matches=privacy_report.identifying_matches,
+        dcr_statistic=privacy_report.dcr_statistic,
     )
