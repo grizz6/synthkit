@@ -20,6 +20,8 @@ import synthkit as sk
 DATA_DIR = Path(__file__).parent / "data"
 ZIP_PATH = DATA_DIR / "bike-sharing.zip"
 CSV_PATH = DATA_DIR / "day.csv"
+# Monday to Friday (weekday 1-5), and not a holiday.
+WORKINGDAY_RULE = "(weekday >= 1) * (weekday <= 5) * (holiday == 0)"
 DATA_URL = (
     "https://archive.ics.uci.edu/ml/machine-learning-databases/00275/Bike-Sharing-Dataset.zip"
 )
@@ -72,11 +74,6 @@ def main() -> None:
     print(f"corr(temp, rentals): real={real_temp_corr:.3f} synthetic={synth_temp_corr:.3f}")
     print()
 
-    report = sk.check(synthetic, profile, real=df, min_dcr_ratio=0.5)
-    print(f"privacy check: dcr_ratio={report.dcr_ratio:.3f} exact_matches={report.exact_matches}")
-    print(f"passed: {report.passed}")
-    print()
-
     # cnt is exactly casual + registered in the real data, a genuine derived-column
     # relationship, not an approximate correlation. The copula models all three as
     # separately-correlated numeric columns, so without declaring the relationship, it only
@@ -86,13 +83,42 @@ def main() -> None:
     print(f"cnt == casual + registered, real data:              {exact_without_constraint:.3f}")
     print(f"cnt == casual + registered, synthetic (no constraint): {without_constraint:.3f}")
 
-    profile_with_constraint = sk.fit(df, constraints=[sk.Derived("cnt", "casual + registered")])
+    # workingday is a calendar fact too: 1 exactly on a weekday that isn't a holiday. Left
+    # undeclared, the copula invents days the calendar can't have (a Wednesday that is
+    # neither a working day nor a holiday).
+    constraints = [
+        sk.Derived("cnt", "casual + registered"),
+        sk.Derived("workingday", WORKINGDAY_RULE),
+    ]
+    profile_with_constraint = sk.fit(df, constraints=constraints)
     synthetic_with_constraint = sk.emit(profile_with_constraint, n=len(df), seed=0)
     with_constraint = (
         synthetic_with_constraint["casual"] + synthetic_with_constraint["registered"]
         == synthetic_with_constraint["cnt"]
     ).mean()
     print(f"cnt == casual + registered, synthetic (Derived constraint): {with_constraint:.3f}")
+
+    def consistent_workingday(frame: pd.DataFrame) -> float:
+        return float((frame.eval(WORKINGDAY_RULE).astype(int) == frame["workingday"]).mean())
+
+    print(
+        "workingday matches the calendar, synthetic (no constraint): "
+        f"{consistent_workingday(synthetic):.3f}"
+    )
+    print(
+        "workingday matches the calendar, synthetic (Derived constraint): "
+        f"{consistent_workingday(synthetic_with_constraint):.3f}"
+    )
+    print()
+
+    report = sk.check(
+        synthetic_with_constraint, profile_with_constraint, real=df, min_dcr_ratio=0.5
+    )
+    print(
+        f"privacy check: dcr_ratio={report.dcr_ratio:.3f} exact_matches={report.exact_matches} "
+        f"rare_combination_leaks={report.rare_combination_leaks}"
+    )
+    print(f"passed: {report.passed}")
 
 
 if __name__ == "__main__":
