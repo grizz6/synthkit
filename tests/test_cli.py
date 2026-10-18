@@ -1033,3 +1033,106 @@ def test_split_file_column_treats_a_drive_letter_colon_as_part_of_the_path(sourc
     # not exist: C" instead of being told the column was missing. Run on every OS, not only in
     # Windows CI, since the parsing is pure string handling.
     assert _split_file_column(source) == expected
+
+
+def _check_args(fixtures, profile, real, *extra):
+    return ["check", str(fixtures), "--profile", str(profile), "--real", str(real), *extra]
+
+
+def test_check_json_reports_a_failure_and_still_exits_nonzero(tmp_path):
+    data_path = tmp_path / "data.csv"
+    make_df(n=500).to_csv(data_path, index=False)
+    profile_path = tmp_path / "profile.json"
+    runner.invoke(app, ["fit", str(data_path), "-o", str(profile_path)])
+
+    result = runner.invoke(app, _check_args(data_path, profile_path, data_path, "--json"))
+
+    assert result.exit_code == 1
+    report = json.loads(result.stdout)
+    assert report["passed"] is False
+    assert report["identifying_matches"] > 0
+    assert report["min_dcr_ratio"] == 1.0
+    assert set(report) == {
+        "passed",
+        "dcr_ratio",
+        "min_dcr_ratio",
+        "exact_matches",
+        "identifying_matches",
+        "rare_combination_leaks",
+    }
+
+
+def test_check_json_reports_a_pass_with_exit_code_zero(tmp_path):
+    data_path = tmp_path / "data.csv"
+    make_df(n=2000).to_csv(data_path, index=False)
+    profile_path = tmp_path / "profile.json"
+    runner.invoke(app, ["fit", str(data_path), "-o", str(profile_path)])
+    fixtures_path = tmp_path / "fixtures.csv"
+    runner.invoke(
+        app, ["emit", str(profile_path), "-n", "2000", "--seed", "0", "-o", str(fixtures_path)]
+    )
+
+    result = runner.invoke(
+        app, _check_args(fixtures_path, profile_path, data_path, "--min-dcr-ratio", "0.5", "--json")
+    )
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout)["passed"] is True
+
+
+def test_check_json_with_explain_includes_per_column_attribution(tmp_path):
+    data_path, profile_path = _leaky_dataset(tmp_path)
+
+    result = runner.invoke(
+        app,
+        _check_args(
+            data_path, profile_path, data_path, "--min-dcr-ratio", "0", "--explain", "--json"
+        ),
+    )
+
+    report = json.loads(result.stdout)
+    remaining = report["remaining_if_dropped"]
+    assert set(remaining) == {"segment", "zip", "age"}
+    assert all(count <= report["identifying_matches"] for count in remaining.values())
+
+
+def test_diff_json_reports_drifted_and_schema_changes(tmp_path):
+    rng = np.random.default_rng(0)
+    n = 400
+    data_path = tmp_path / "data.csv"
+    pd.DataFrame({"age": rng.normal(40, 10, n), "income": rng.normal(50000, 1000, n)}).to_csv(
+        data_path, index=False
+    )
+    profile_path = tmp_path / "profile.json"
+    runner.invoke(app, ["fit", str(data_path), "-o", str(profile_path)])
+
+    changed_path = tmp_path / "changed.csv"
+    pd.DataFrame({"age": rng.normal(80, 10, n), "tenure": rng.normal(5, 2, n)}).to_csv(
+        changed_path, index=False
+    )
+
+    result = runner.invoke(app, ["diff", str(profile_path), str(changed_path), "--json"])
+
+    assert result.exit_code == 1
+    report = json.loads(result.stdout)
+    assert report["passed"] is False
+    assert report["drifted_columns"] == ["age"]
+    assert report["missing_columns"] == ["income"]
+    assert report["new_columns"] == ["tenure"]
+    assert report["column_drift"]["age"] > report["threshold"]
+
+
+def test_diff_json_reports_a_pass_with_exit_code_zero(tmp_path):
+    data_path = tmp_path / "data.csv"
+    make_df(seed=0).to_csv(data_path, index=False)
+    profile_path = tmp_path / "profile.json"
+    runner.invoke(app, ["fit", str(data_path), "-o", str(profile_path)])
+    fresh_path = tmp_path / "fresh.csv"
+    make_df(seed=1).to_csv(fresh_path, index=False)
+
+    result = runner.invoke(app, ["diff", str(profile_path), str(fresh_path), "--json"])
+
+    assert result.exit_code == 0, result.output
+    report = json.loads(result.stdout)
+    assert report["passed"] is True
+    assert report["drifted_columns"] == []

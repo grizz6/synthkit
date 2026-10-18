@@ -261,6 +261,9 @@ def check(
         "--explain",
         help="Attribute identifying matches to the columns driving them.",
     ),
+    as_json: bool = typer.Option(
+        False, "--json", help="Emit machine-readable JSON instead of text. Exit code is unchanged."
+    ),
 ) -> None:
     """Verify synthetic fixtures against a privacy baseline. Exits non-zero on failure."""
     synthetic = read_table(fixtures)
@@ -280,13 +283,7 @@ def check(
         typer.echo(f"check failed: {e}", err=True)
         raise typer.Exit(code=1) from e
 
-    typer.echo(f"dcr_ratio: {report.dcr_ratio:.3f} (min {min_dcr_ratio})")
-    typer.echo(f"exact_matches: {report.exact_matches}")
-    # The verdict turns on this one, not the raw count above: on a low-entropy dataset every
-    # synthetic row necessarily reproduces some real one without identifying anybody.
-    typer.echo(f"identifying_matches: {report.identifying_matches}")
-    typer.echo(f"rare_combination_leaks: {report.rare_combination_leaks}")
-
+    remaining: dict[str, int] = {}
     if explain and report.identifying_matches:
         content_columns = [
             column
@@ -297,6 +294,31 @@ def check(
         remaining = privacy.explain_identifying_matches(
             synthetic, real_df, content_columns, rare_combination_threshold
         )
+
+    if as_json:
+        payload: dict[str, Any] = {
+            "passed": report.passed,
+            "dcr_ratio": report.dcr_ratio,
+            "min_dcr_ratio": min_dcr_ratio,
+            "exact_matches": report.exact_matches,
+            "identifying_matches": report.identifying_matches,
+            "rare_combination_leaks": report.rare_combination_leaks,
+        }
+        if explain:
+            payload["remaining_if_dropped"] = remaining
+        typer.echo(json.dumps(payload, indent=2))
+        if not report.passed:
+            raise typer.Exit(code=1)
+        return
+
+    typer.echo(f"dcr_ratio: {report.dcr_ratio:.3f} (min {min_dcr_ratio})")
+    typer.echo(f"exact_matches: {report.exact_matches}")
+    # The verdict turns on this one, not the raw count above: on a low-entropy dataset every
+    # synthetic row necessarily reproduces some real one without identifying anybody.
+    typer.echo(f"identifying_matches: {report.identifying_matches}")
+    typer.echo(f"rare_combination_leaks: {report.rare_combination_leaks}")
+
+    if remaining:
         typer.echo("\nidentifying matches remaining if each column were dropped:")
         for column, count in sorted(remaining.items(), key=lambda kv: kv[1]):
             removed = report.identifying_matches - count
@@ -327,12 +349,29 @@ def diff(
         help="Fresh data to check for drift away from the profile.",
     ),
     threshold: float = typer.Option(DEFAULT_DRIFT_THRESHOLD, "--threshold"),
+    as_json: bool = typer.Option(
+        False, "--json", help="Emit machine-readable JSON instead of text. Exit code is unchanged."
+    ),
 ) -> None:
     """Check whether fresh data has drifted away from the profile fixtures are built on."""
     profile_obj = Profile.load(profile)
     df = read_table(data)
 
     report = compute_drift(profile_obj, df, threshold=threshold)
+
+    if as_json:
+        payload = {
+            "passed": report.passed,
+            "threshold": threshold,
+            "column_drift": report.column_drift,
+            "drifted_columns": report.drifted_columns,
+            "missing_columns": report.missing_columns,
+            "new_columns": report.new_columns,
+        }
+        typer.echo(json.dumps(payload, indent=2))
+        if not report.passed:
+            raise typer.Exit(code=1)
+        return
 
     for column, score in sorted(report.column_drift.items(), key=lambda kv: -kv[1]):
         flag = " DRIFTED" if column in report.drifted_columns else ""
