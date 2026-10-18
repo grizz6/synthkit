@@ -119,6 +119,17 @@ def main() -> None:
         f"rare_combination_leaks={report.rare_combination_leaks}"
     )
     print(f"passed: {report.passed}")
+    holiday_days = int((df["holiday"] == 1).sum())
+    worst_weather_days = int((df["weathersit"] == 3).sum())
+    print(
+        "  (The rare-combination leaks come from two categories that are rare in the real\n"
+        f"  data: holidays ({holiday_days} days) and the worst weather ({worst_weather_days} "
+        "days). Paired with a month or a\n"
+        "  weekday, either one makes a combination seen fewer than 5 times, which is what the\n"
+        "  check flags. On data about people that would be a real exposure; here each row is\n"
+        "  a calendar day, so the failure is expected, and avoiding it would mean never\n"
+        "  generating a holiday.)"
+    )
 
 
 if __name__ == "__main__":
