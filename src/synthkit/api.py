@@ -82,6 +82,7 @@ def check(
     holdout_fraction: float = 0.2,
     min_dcr_ratio: float = _privacy.DEFAULT_MIN_DCR_RATIO,
     seed: int = 0,
+    rare_combination_threshold: int = _privacy.DEFAULT_RARE_COMBINATION_THRESHOLD,
 ) -> CheckReport:
     privacy_report = _privacy.check(
         synthetic,
@@ -89,6 +90,7 @@ def check(
         profile.column_types,
         holdout_fraction=holdout_fraction,
         min_dcr_ratio=min_dcr_ratio,
+        rare_combination_threshold=rare_combination_threshold,
         seed=seed,
     )
     ks_by_column = _fidelity_by_column(real, synthetic, profile.column_types)

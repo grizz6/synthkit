@@ -127,3 +127,36 @@ def test_check_handles_timezone_aware_datetime_columns():
     report = sk.check(synthetic, profile, real=real)
     assert report.ks_by_column["created_at"] < 0.2
     assert np.isfinite(report.dcr_ratio)
+
+
+def _data_with_a_rare_pair():
+    # (north, enterprise-rare) occurs 3 times: rare at the default threshold of 5, not at 1.
+    rng = np.random.default_rng(0)
+    n = 500
+    region = np.array(rng.choice(["north", "south"], size=n), dtype=object)
+    plan_tier = np.array(rng.choice(["basic", "pro"], size=n), dtype=object)
+    region[:3] = "north"
+    plan_tier[:3] = "enterprise-rare"
+    return pd.DataFrame({"region": region, "plan_tier": plan_tier})
+
+
+def test_check_accepts_a_rare_combination_threshold():
+    # The CLI exposed --rare-combination-threshold but sk.check() had no way to set it.
+    # Checking the real data against itself guarantees the rare pair is reproduced.
+    df = _data_with_a_rare_pair()
+    profile = sk.fit(df)
+
+    default = sk.check(df, profile, real=df, min_dcr_ratio=0)
+    lenient = sk.check(df, profile, real=df, min_dcr_ratio=0, rare_combination_threshold=1)
+
+    assert default.rare_combination_leaks > 0
+    assert lenient.rare_combination_leaks == 0
+
+
+def test_check_defaults_to_the_same_threshold_as_the_cli():
+    import inspect
+
+    from synthkit.privacy import DEFAULT_RARE_COMBINATION_THRESHOLD
+
+    default = inspect.signature(sk.check).parameters["rare_combination_threshold"].default
+    assert default == DEFAULT_RARE_COMBINATION_THRESHOLD

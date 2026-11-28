@@ -34,7 +34,7 @@ thing, and a way to prove it carries no real records.
 - **Fast enough for every pull request.** About 3 million rows per second for a 6-column table
   on a laptop.
 
-Status: pre-alpha, not on PyPI. 385 tests run in CI on Linux, macOS, and Windows with Python
+Status: pre-alpha, not on PyPI. 387 tests run in CI on Linux, macOS, and Windows with Python
 3.10 to 3.13. Worked examples on four public datasets are in [examples/](examples/).
 
 ## Quick start
@@ -132,6 +132,10 @@ customer_id=fixtures/customers.parquet:id`, so child fixtures join to parent fix
   count only as `exact_matches`, for information.
 - **No rare category pairs.** No synthetic row may reproduce a pair of category values seen
   fewer than 5 times in the real data.
+
+The cutoff of 5 applies to both rare-value rules. Change it with
+`--rare-combination-threshold` on the command line or `rare_combination_threshold=` in
+`sk.check()`.
 
 When it finds identifying matches, `--explain` reports how many would remain if each column
 were dropped, so the column worth coarsening (bucketing ages, say) is at the top.
